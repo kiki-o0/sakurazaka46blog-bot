@@ -1,0 +1,38 @@
+name: Sakurazaka46 Blog Checker
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # 15分ごとに実行（GitHubの混雑状況により遅延あり）
+  workflow_dispatch: # 手動でいつでも実行できるようにするボタン
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: |
+        pip install requests beautifulsoup4
+
+    - name: Run script
+      run: python blog_checker.py
+      env:
+        # ★ここに作成したDiscordのWebhook URL（秘密のパスワード）を紐付けます
+        WEBHOOK_INOUE: ${{ secrets.WEBHOOK_INOUE }}
+        WEBHOOK_OZONO: ${{ secrets.WEBHOOK_OZONO }}
+        WEBHOOK_ENDO: ${{ secrets.WEBHOOK_ENDO }}
+
+    - name: Commit and push changes (Cache update)
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@://github.com"
+        git add last_blogs.json || true
+        git commit -m "Update cache [skip ci]" || true
+        git push || true
