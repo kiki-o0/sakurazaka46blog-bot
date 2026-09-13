@@ -1,0 +1,1 @@
+# sakurazaka46blog-bot
