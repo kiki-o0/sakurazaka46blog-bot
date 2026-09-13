@@ -2,8 +2,8 @@ name: Sakurazaka46 Blog Checker
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # 15分ごとに実行（GitHubの混雑状況により遅延あり）
-  workflow_dispatch: # 手動でいつでも実行できるようにするボタン
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   check:
@@ -24,10 +24,37 @@ jobs:
     - name: Run script
       run: python blog_checker.py
       env:
-        # ★ここに作成したDiscordのWebhook URL（秘密のパスワード）を紐付けます
-        WEBHOOK_INOUE: ${{ secrets.WEBHOOK_INOUE }}
+        WEBHOOK_ENDO_H: ${{ secrets.WEBHOOK_ENDO_H }}
         WEBHOOK_OZONO: ${{ secrets.WEBHOOK_OZONO }}
-        WEBHOOK_ENDO: ${{ secrets.WEBHOOK_ENDO }}
+        WEBHOOK_ONUMA: ${{ secrets.WEBHOOK_ONUMA }}
+        WEBHOOK_KOUSAKA: ${{ secrets.WEBHOOK_KOUSAKA }}
+        WEBHOOK_TAMURA: ${{ secrets.secrets.WEBHOOK_TAMURA }}
+        WEBHOOK_FUJIYOSHI: ${{ secrets.WEBHOOK_FUJIYOSHI }}
+        WEBHOOK_MASUMOTO: ${{ secrets.WEBHOOK_MASUMOTO }}
+        WEBHOOK_MATSUDA: ${{ secrets.WEBHOOK_MATSUDA }}
+        WEBHOOK_MORITA: ${{ secrets.WEBHOOK_MORITA }}
+        WEBHOOK_MORIYA: ${{ secrets.WEBHOOK_MORIYA }}
+        WEBHOOK_YAMASAKI: ${{ secrets.WEBHOOK_YAMASAKI }}
+        WEBHOOK_ISHIMORI: ${{ secrets.WEBHOOK_ISHIMORI }}
+        WEBHOOK_ENDO_R: ${{ secrets.WEBHOOK_ENDO_R }}
+        WEBHOOK_ODAKURA: ${{ secrets.WEBHOOK_ODAKURA }}
+        WEBHOOK_KOJIMA: ${{ secrets.WEBHOOK_KOJIMA }}
+        WEBHOOK_TANIGUCHI: ${{ secrets.WEBHOOK_TANIGUCHI }}
+        WEBHOOK_NAKAJIMA: ${{ secrets.WEBHOOK_NAKAJIMA }}
+        WEBHOOK_MATONO: ${{ secrets.WEBHOOK_MATONO }}
+        WEBHOOK_MUKAI: ${{ secrets.WEBHOOK_MUKAI }}
+        WEBHOOK_MURAI: ${{ secrets.WEBHOOK_MURAI }}
+        WEBHOOK_MURAYAMA: ${{ secrets.WEBHOOK_MURAYAMA }}
+        WEBHOOK_YAMASHITA: ${{ secrets.WEBHOOK_YAMASHITA }}
+        WEBHOOK_ASAI: ${{ secrets.WEBHOOK_ASAI }}
+        WEBHOOK_INAGUMA: ${{ secrets.WEBHOOK_INAGUMA }}
+        WEBHOOK_KATUMATA: ${{ secrets.WEBHOOK_KATUMATA }}
+        WEBHOOK_SATO: ${{ secrets.WEBHOOK_SATO }}
+        WEBHOOK_NAKAGAWA: ${{ secrets.WEBHOOK_NAKAGAWA }}
+        WEBHOOK_MATSUMOTO: ${{ secrets.WEBHOOK_MATSUMOTO }}
+        WEBHOOK_MEGURO: ${{ secrets.WEBHOOK_MEGURO }}
+        WEBHOOK_YAMAKAWA: ${{ secrets.WEBHOOK_YAMAKAWA }}
+        WEBHOOK_YAMADA: ${{ secrets.WEBHOOK_YAMADA }}
 
     - name: Commit and push changes (Cache update)
       run: |
