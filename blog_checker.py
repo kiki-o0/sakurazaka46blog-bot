@@ -6,9 +6,8 @@ from bs4 import BeautifulSoup
 # 各メンバーのクエリパラメータIDとDiscord Webhookの対応表
 # ★テスト用に数人分だけ設定し、後から追加・編集できます
 WEBHOOKS = {
-    "04": os.environ.get("WEBHOOK_INOUE"),  # 井上梨名
-    "05": os.environ.get("WEBHOOK_OZONO"),  # 大園玲
-    "06": os.environ.get("WEBHOOK_ENDO"),   # 遠藤光莉
+    "54": os.environ.get("WEBHOOK_OZONO"),  # 大園玲
+    "53": os.environ.get("WEBHOOK_ENDO"),   # 遠藤光莉
     # ※残りのメンバーも後ほどここにIDと名前を追加していきます
 }
 
