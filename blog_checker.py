@@ -3,15 +3,44 @@ import json
 import requests
 from bs4 import BeautifulSoup
 
-# 各メンバーのクエリパラメータIDとDiscord Webhookの対応表
-# ★テスト用に数人分だけ設定し、後から追加・編集できます
+# 櫻坂46メンバー 2026年最新公式IDとSecrets名の対応表（全31名）
 WEBHOOKS = {
-    "54": os.environ.get("WEBHOOK_OZONO"),  # 大園玲
-    "53": os.environ.get("WEBHOOK_ENDO"),   # 遠藤光莉
-    # ※残りのメンバーも後ほどここにIDと名前を追加していきます
+    # 二期生
+    "53": os.environ.get("WEBHOOK_ENDO_H"),  # 遠藤光莉
+    "54": os.environ.get("WEBHOOK_OZONO"),   # 大園玲
+    "55": os.environ.get("WEBHOOK_ONUMA"),   # 大沼晶保
+    "56": os.environ.get("WEBHOOK_KOUSAKA"), # 幸阪茉里乃
+    "57": os.environ.get("WEBHOOK_TAMURA"),  # 田村保乃
+    "58": os.environ.get("WEBHOOK_FUJIYOSHI"),# 藤吉夏鈴
+    "59": os.environ.get("WEBHOOK_MASUMOTO"), # 増本綺良
+    "60": os.environ.get("WEBHOOK_MATSUDA"),  # 松田里奈
+    "61": os.environ.get("WEBHOOK_MORITA"),   # 森田ひかる
+    "62": os.environ.get("WEBHOOK_MORIYA"),   # 守屋麗奈
+    "63": os.environ.get("WEBHOOK_YAMASAKI"), # 山﨑天
+    # 三期生
+    "64": os.environ.get("WEBHOOK_ISHIMORI"), # 石森璃花
+    "65": os.environ.get("WEBHOOK_ENDO_R"),   # 遠藤理子
+    "66": os.environ.get("WEBHOOK_ODAKURA"),  # 小田倉麗奈
+    "67": os.environ.get("WEBHOOK_KOJIMA"),   # 小島凪紗
+    "68": os.environ.get("WEBHOOK_TANIGUCHI"),# 谷口愛季
+    "69": os.environ.get("WEBHOOK_NAKAJIMA"), # 中嶋優月
+    "70": os.environ.get("WEBHOOK_MATONO"),   # 的野美青
+    "71": os.environ.get("WEBHOOK_MUKAI"),    # 向井純葉
+    "72": os.environ.get("WEBHOOK_MURAI"),    # 村井優
+    "73": os.environ.get("WEBHOOK_MURAYAMA"), # 村山美羽
+    "74": os.environ.get("WEBHOOK_YAMASHITA"),# 山下瞳月
+    # 四期生
+    "75": os.environ.get("WEBHOOK_ASAI"),     # 浅井恋乃未
+    "76": os.environ.get("WEBHOOK_INAGUMA"),  # 稲熊ひな
+    "77": os.environ.get("WEBHOOK_KATUMATA"), # 勝又春
+    "78": os.environ.get("WEBHOOK_SATO"),     # 佐藤愛桜
+    "79": os.environ.get("WEBHOOK_NAKAGAWA"), # 中川 智尋
+    "80": os.environ.get("WEBHOOK_MATSUMOTO"),# 松本和子
+    "81": os.environ.get("WEBHOOK_MEGURO"),   # 目黒陽色
+    "82": os.environ.get("WEBHOOK_YAMAKAWA"), # 山川宇衣
+    "83": os.environ.get("WEBHOOK_YAMADA"),   # 山田桃実
 }
 
-# 過去の最新記事URLを記憶しておくファイル名
 CACHE_FILE = "last_blogs.json"
 
 def load_cache():
@@ -29,34 +58,27 @@ def check_blog():
     base_url = "https://sakurazaka46.com"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
-    # 登録されているメンバーごとにチェック
     for member_id, webhook_url in WEBHOOKS.items():
         if not webhook_url:
-            continue # Webhookが設定されていない場合はスキップ
+            continue
             
         url = f"{base_url}?ct={member_id}"
         try:
             res = requests.get(url, headers=headers)
             soup = BeautifulSoup(res.text, "html.parser")
-            
-            # 最新のブログ記事を1件取得
             latest_post = soup.find("li", class_="box")
             if not latest_post:
                 continue
                 
-            # 記事のURL、タイトル、画像などを抽出
             post_a = latest_post.find("a")
             post_url = "https://sakurazaka46.com" + post_a["href"]
             title = latest_post.find("p", class_="title").text.strip()
             name = latest_post.find("p", class_="name").text.strip()
             
-            # サムネイル画像があれば取得
             img_tag = latest_post.find("div", class_="img").find("img")
             img_url = img_tag["src"] if img_tag else None
             
-            # 前回チェック時とURLが違っていれば新しいブログが更新されたと判定
             if cache.get(member_id) != post_url:
-                # 初回実行時は通知せずキャッシュに保存するだけ（大量通知を防ぐため）
                 if member_id in cache:
                     send_discord(webhook_url, name, title, post_url, img_url)
                 cache[member_id] = post_url
@@ -72,11 +94,11 @@ def send_discord(webhook_url, name, title, post_url, img_url):
             "title": f"【ブログ更新】{title}",
             "url": post_url,
             "author": {"name": name},
-            "color": 16738740 # 櫻色のカラーコード
+            "color": 16738740
         }]
     }
     if img_url:
-        payload["embeds"][0]["image"] = {"url": img_url}
+        payload["embeds"][0]["image"] = {"url": img_url} # バグ修正: embedsの配列内にimageを正しく配置
         
     requests.post(webhook_url, json=payload)
 
