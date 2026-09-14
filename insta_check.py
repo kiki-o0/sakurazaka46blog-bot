@@ -1,7 +1,7 @@
 import os
-import re
 import json
 import requests
+from bs4 import BeautifulSoup
 
 MEMBERS = [
     {"name": "山﨑天", "insta_id": "yamasaki.ten", "webhook_env": "WEBHOOK_TEN"},
@@ -10,13 +10,14 @@ MEMBERS = [
 
 HISTORY_FILE = "insta_history.json"
 
-# ▼ 画像から確認したあなた専用のVercel URLをセット済みです ▼
-RSSHUB_BASE = "https://rss-hub-wheat-five.vercel.app"
-
 def get_latest_post(insta_id):
-    print(f"👀 {insta_id} のRSSHubを確認中...")
-    url = f"{RSSHUB_BASE}/instagram/user/{insta_id}?format=json"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    print(f"👀 {insta_id} を別ルート(Picuki)で確認中...")
+    url = f"https://www.picuki.com/profile/{insta_id}"
+    # ロボットっぽさを消すための変装
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8"
+    }
     
     try:
         response = requests.get(url, headers=headers, timeout=15)
@@ -24,25 +25,28 @@ def get_latest_post(insta_id):
             print(f"❌ アクセス拒否（エラー番号: {response.status_code}）")
             return None
 
-        data = response.json()
-        items = data.get("items", [])
+        soup = BeautifulSoup(response.text, "html.parser")
+        # 最新の投稿のリンクを探す
+        post_link_tag = soup.select_one(".box-photo a")
         
-        if not items:
-            print("❌ 投稿データが空です")
+        if not post_link_tag:
+            print("❌ 投稿が見つかりません")
             return None
 
-        latest_post = items[0]
-        post_url = latest_post.get("url") or latest_post.get("id", "")
+        post_url = post_link_tag.get("href", "")
         
-        match = re.search(r'/(?:p|post|reel)/([^/?]+)', post_url)
-        shortcode = match.group(1) if match else "unknown_id"
-        
-        print(f"✅ 最新投稿を発見: {shortcode}")
+        # URLから投稿IDを抜き出す
+        post_id = post_url.split("/")[-1]
+        if not post_id:
+            return None
+            
+        print(f"✅ 最新投稿を発見: {post_id}")
 
+        # PicukiのURLをそのまま送ることで、ログイン不要で確実に見られます
         return {
-            "id": shortcode,
-            "url": f"https://www.instagram.com/p/{shortcode}/",
-            "caption": latest_post.get("title", "新しい投稿があります！")[:100]
+            "id": post_id,
+            "url": post_url,
+            "caption": "Instagramが更新されました！（リンク先から見られます）"
         }
     except Exception as e:
         print(f"❌ エラー: {e}")
@@ -52,8 +56,11 @@ def main():
     print("=== インスタ確認スタート ===")
     history = {}
     if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            history = json.load(f)
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                history = json.load(f)
+        except Exception:
+            pass
 
     is_updated = False
 
@@ -70,8 +77,13 @@ def main():
         if last_id != latest["id"]:
             print(f"✨ {member['name']} の新着をDiscordへ送ります！")
             payload = {
-                "username": f"{member['name']} Instagram",
-                "embeds": [{"title": f"{member['name']}がInstagramを更新しました！", "url": latest["url"], "color": 15893389}]
+                "username": f"{member['name']} Instagram通知",
+                "embeds": [{
+                    "title": f"{member['name']}がInstagramを更新しました！", 
+                    "url": latest["url"], 
+                    "color": 15893389, 
+                    "description": latest["caption"]
+                }]
             }
             requests.post(webhook_url, json=payload, timeout=10)
             history[member["insta_id"]] = latest["id"]
