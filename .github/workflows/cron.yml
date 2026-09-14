@@ -19,7 +19,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install requests beautifulsoup4
+          pip install requests beautifulsoup4
 
     - name: Run script
       run: python blog_checker.py
@@ -28,7 +28,7 @@ jobs:
         WEBHOOK_OZONO: ${{ secrets.WEBHOOK_OZONO }}
         WEBHOOK_ONUMA: ${{ secrets.WEBHOOK_ONUMA }}
         WEBHOOK_KOUSAKA: ${{ secrets.WEBHOOK_KOUSAKA }}
-        WEBHOOK_TAMURA: ${{ secrets.secrets.WEBHOOK_TAMURA }}
+        WEBHOOK_TAMURA: ${{ secrets.WEBHOOK_TAMURA }}
         WEBHOOK_FUJIYOSHI: ${{ secrets.WEBHOOK_FUJIYOSHI }}
         WEBHOOK_MASUMOTO: ${{ secrets.WEBHOOK_MASUMOTO }}
         WEBHOOK_MATSUDA: ${{ secrets.WEBHOOK_MATSUDA }}
