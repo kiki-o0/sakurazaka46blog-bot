@@ -10,12 +10,11 @@ MEMBERS = [
 
 HISTORY_FILE = "insta_history.json"
 
-# ▼ VercelのURL（https://〇〇.vercel.app）があれば書き換えると最強の抜け道になります ▼
-RSSHUB_BASE = "https://rsshub.app"
+# ▼ 画像から確認したあなた専用のVercel URLをセット済みです ▼
+RSSHUB_BASE = "https://rss-hub-wheat-five.vercel.app"
 
 def get_latest_post(insta_id):
     print(f"👀 {insta_id} のRSSHubを確認中...")
-    # ロボットが読みやすいJSONフォーマットで取得
     url = f"{RSSHUB_BASE}/instagram/user/{insta_id}?format=json"
     headers = {"User-Agent": "Mozilla/5.0"}
     
@@ -32,11 +31,9 @@ def get_latest_post(insta_id):
             print("❌ 投稿データが空です")
             return None
 
-        # 一番新しい投稿を抜き出す
         latest_post = items[0]
         post_url = latest_post.get("url") or latest_post.get("id", "")
         
-        # URLから投稿固有のID（ショートコード）を切り出す
         match = re.search(r'/(?:p|post|reel)/([^/?]+)', post_url)
         shortcode = match.group(1) if match else "unknown_id"
         
