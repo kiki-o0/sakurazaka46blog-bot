@@ -55,17 +55,10 @@ jobs:
           WEBHOOK_YAMADA: ${{ secrets.WEBHOOK_YAMADA }}
         run: python blog_checker.py
 
-      - name: Run Insta Check
-        env:
-          WEBHOOK_TEN: ${{ secrets.WEBHOOK_TEN }}
-          WEBHOOK_AIRI: ${{ secrets.WEBHOOK_AIRI }}
-        run: python insta_check.py
-
       - name: Commit and push changes (Cache)
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add last_blogs.json || true
-          git add insta_history.json || true
           git commit -m "Update cache [skip ci]" || true
           git push || true
