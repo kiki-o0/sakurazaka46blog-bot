@@ -1,0 +1,35 @@
+name: Insta Checker
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Run Insta Check
+        env:
+          WEBHOOK_TEN: ${{ secrets.WEBHOOK_TEN }}
+          WEBHOOK_AIRI: ${{ secrets.WEBHOOK_AIRI }}
+        run: python insta_check.py
+
+      - name: Commit and push changes (Cache)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add insta_history.json || true
+          git commit -m "Update insta cache [skip ci]" || true
+          git push || true
