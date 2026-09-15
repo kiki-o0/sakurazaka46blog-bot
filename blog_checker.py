@@ -39,7 +39,6 @@ def save_cache(cache):
 
 def check_blog():
     cache = load_cache()
-    # 🌟 変装アイテム：警備員を騙すために、より人間っぽく見せる設定！
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept-Language": "ja,en-US;q=0.9,en;q=0.8"
@@ -55,12 +54,11 @@ def check_blog():
         try:
             res = requests.get(url, headers=headers, timeout=15)
             
-            # 🌟 拡声器：ロボットに今の状況を叫ばせる！
             if res.status_code == 403:
-                print(f"[{member_id}] ❌ 警備員にブロックされました (403 Forbidden)")
+                print(f"[{member_id}] ❌ 警備員にブロックされました")
                 continue
             elif res.status_code != 200:
-                print(f"[{member_id}] ⚠️ エラー発生: {res.status_code}")
+                print(f"[{member_id}] ⚠️ エラー: {res.status_code}")
                 continue
             else:
                 print(f"[{member_id}] 🚪 ページに入れました！記事を探します...")
@@ -69,17 +67,21 @@ def check_blog():
             
             latest_post = soup.find("li", class_="box")
             if not latest_post:
-                print(f"[{member_id}] 🤷‍♂️ 記事が見つかりません")
+                print(f"[{member_id}] 🤷‍♂️ 記事の箱が見つかりません")
                 continue
                 
             post_a = latest_post.find("a")
             if not post_a:
+                print(f"[{member_id}] 💦 リンクが見つかりません")
                 continue
             post_url = "https://sakurazaka46.com" + post_a["href"]
             
-            title_tag = latest_post.find("p", class_="title")
-            name_tag = latest_post.find("p", class_="name")
+            # 🌟ココが賢くなったポイント！「pタグ」じゃなくてもタイトルと名前を見つけ出します！
+            title_tag = latest_post.find(class_="title")
+            name_tag = latest_post.find(class_="name")
+            
             if not title_tag or not name_tag:
+                print(f"[{member_id}] 💦 タイトルか名前が見つからなくて諦めました (タイトルある？: {bool(title_tag)}, 名前ある？: {bool(name_tag)})")
                 continue
                 
             title = title_tag.text.strip()
