@@ -31,7 +31,7 @@ HISTORY_FILE = "insta_history.json"
 
 def get_latest_post_safe(insta_id, cookie_value):
     print(f"👀 {insta_id} のページを安全に確認中...")
-    url = f"https://www.instagram.com/{insta_id}/"
+    url = f"https://www.instagram.com/{insta_id}"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -51,7 +51,7 @@ def get_latest_post_safe(insta_id, cookie_value):
         
         return {
             "id": caption[:50], # 文章が変わったら「更新された」と判断する
-            "url": f"https://www.instagram.com/{insta_id}/",
+            "url": f"https://www.instagram.com/{insta_id}",
             "caption": caption
         }
     except Exception as e:
