@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+from bs4 import BeautifulSoup
 
 # お名前でバッチリ統一されたリスト！
 MEMBERS = [
@@ -28,47 +29,32 @@ MEMBERS = [
 
 HISTORY_FILE = "insta_history.json"
 
-def get_latest_post_ninja(insta_id, cookie_value):
-    print(f"👀 {insta_id} を忍者ルートで確認中...")
-    # Instagramアプリが裏で使っている公式のデータ通信路
-    url = f"https://i.instagram.com/api/v1/users/web_profile_info/?username={insta_id}"
+def get_latest_post_safe(insta_id, cookie_value):
+    print(f"👀 {insta_id} のページを安全に確認中...")
+    url = f"https://www.instagram.com/{insta_id}/"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "X-IG-App-ID": "936619743392459", # インスタ公式のパスポート番号（固定値）
         "Cookie": f"sessionid={cookie_value}"
     }
     
     try:
-        # 10秒でスパッと諦める設定（絶対にフリーズさせない！）
-        response = requests.get(url, headers=headers, timeout=10)
-        
+        # 深追いせず、表の看板（文字）だけ見て帰る安全ルート
+        response = requests.get(url, headers=headers, timeout=15)
         if response.status_code != 200:
-            print(f"❌ 警備員に弾かれました（{response.status_code}）")
             return None
 
-        # 抜き取ったデータを解読
-        data = response.json()
-        edges = data.get("data", {}).get("user", {}).get("edge_owner_to_timeline_media", {}).get("edges", [])
+        soup = BeautifulSoup(response.text, "html.parser")
         
-        if not edges:
-            return None
-            
-        # 最新の投稿（1件目）のIDを抜き取る
-        post = edges[0].get("node", {})
-        shortcode = post.get("shortcode")
+        desc_tag = soup.find("meta", property="og:description")
+        caption = desc_tag.get("content", "Instagramが更新されました！") if desc_tag else "Instagramが更新されました！"
         
-        if not shortcode:
-            return None
-
-        # 魔法のURL（ddinstagram）に合体させて返す！
         return {
-            "id": shortcode,
-            "url": f"https://ddinstagram.com/p/{shortcode}/"
+            "id": caption[:50], # 文章が変わったら「更新された」と判断する
+            "url": f"https://www.instagram.com/{insta_id}/",
+            "caption": caption
         }
-        
     except Exception as e:
-        print(f"❌ エラーになっちゃった: {e}")
         return None
 
 def main():
@@ -94,18 +80,24 @@ def main():
         if not webhook_url:
             continue
 
-        latest = get_latest_post_ninja(member["insta_id"], cookie_value)
+        latest = get_latest_post_safe(member["insta_id"], cookie_value)
         if not latest:
             continue
 
         last_id = history.get(member["insta_id"])
         if last_id != latest["id"]:
-            print(f"✨ {member['name']} の新しい投稿を発見！Discordへ送るね！")
+            print(f"✨ {member['name']} の新しい動きを発見！Discordへ送るね！")
             
-            # 文字の中にURLを入れるだけで、Discordが勝手に写真カードを展開してくれます
+            # 写真は出ないけど、確実にお知らせするカード
+            embed_data = {
+                "title": f"{member['name']}のInstagramが更新されました！",
+                "url": latest["url"],
+                "color": 15893389,
+                "description": latest["caption"]
+            }
             payload = {
                 "username": f"{member['name']} Instagram",
-                "content": f"✨ **{member['name']}** がInstagramを更新したよ！\n{latest['url']}"
+                "embeds": [embed_data]
             }
             requests.post(webhook_url, json=payload, timeout=10)
             history[member["insta_id"]] = latest["id"]
