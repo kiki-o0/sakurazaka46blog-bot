@@ -3,7 +3,7 @@ import json
 import requests
 from bs4 import BeautifulSoup
 
-# お名前でバッチリ統一された完璧なリスト！
+# お名前でバッチリ統一されたリスト！
 MEMBERS = [
     {"name": "山﨑天", "insta_id": "yamasaki.ten", "webhook_env": "WEBHOOK_TEN"},
     {"name": "谷口愛季", "insta_id": "airi.taniguchi.official", "webhook_env": "WEBHOOK_AIRI"},
@@ -28,41 +28,56 @@ MEMBERS = [
 ]
 
 HISTORY_FILE = "insta_history.json"
+# さっき見せてくれた「あなたの最強アンテナ」のURLだよ！
+RSSHUB_DOMAIN = "https://rss-hub-wheat-five.vercel.app"
 
-def get_latest_post_safe(insta_id, cookie_value):
-    print(f"👀 {insta_id} のページをサッと確認中...")
-    url = f"https://www.instagram.com/{insta_id}/"
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Cookie": f"sessionid={cookie_value}"
-    }
+def get_latest_post_via_rss(insta_id):
+    print(f"👀 {insta_id} をアンテナ経由で安全に確認中...")
+    url = f"{RSSHUB_DOMAIN}/instagram/user/{insta_id}"
     
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        # アンテナからデータをもらってくる
+        response = requests.get(url, timeout=15)
         if response.status_code != 200:
+            print(f"❌ アンテナがお休み中みたい（{response.status_code}）")
             return None
 
+        # データを読み解く
         soup = BeautifulSoup(response.text, "html.parser")
+        items = soup.find_all("item")
         
-        desc_tag = soup.find("meta", property="og:description")
-        caption = desc_tag.get("content", "Instagramが更新されました！") if desc_tag else "Instagramが更新されました！"
+        if not items:
+            return None
+
+        # 一番新しい投稿（1番上のアイテム）を取り出す
+        latest_item = items[0]
+        link = latest_item.find("link").text if latest_item.find("link") else f"https://www.instagram.com/{insta_id}/"
+        title = latest_item.find("title").text if latest_item.find("title") else "Instagram更新！"
         
+        # 写真（imgタグ）を探し出す
+        description = latest_item.find("description").text if latest_item.find("description") else ""
+        img_url = ""
+        if description:
+            desc_soup = BeautifulSoup(description, "html.parser")
+            img_tag = desc_soup.find("img")
+            if img_tag and img_tag.get("src"):
+                img_url = img_tag.get("src")
+
+        guid = latest_item.find("guid").text if latest_item.find("guid") else link
+
         return {
-            "id": caption[:50],
-            "url": f"https://www.instagram.com/{insta_id}/",
-            "caption": caption
+            "id": guid,
+            "url": link,
+            "caption": title,
+            "image": img_url
         }
     except Exception as e:
+        print(f"❌ エラーになっちゃった: {e}")
         return None
 
 def main():
     print("=== インスタ確認スタート ===")
     
-    cookie_value = os.environ.get("INSTA_COOKIE")
-    if not cookie_value:
-        return
-
     history = {}
     if os.path.exists(HISTORY_FILE):
         try:
@@ -78,20 +93,25 @@ def main():
         if not webhook_url:
             continue
 
-        latest = get_latest_post_safe(member["insta_id"], cookie_value)
+        # アンテナを使って確認するよ！合鍵（Cookie）はもういらない！
+        latest = get_latest_post_via_rss(member["insta_id"])
         if not latest:
             continue
 
         last_id = history.get(member["insta_id"])
         if last_id != latest["id"]:
-            print(f"✨ {member['name']} の新しい動きを発見！Discordへ送るね！")
+            print(f"✨ {member['name']} の新しい投稿を発見！Discordへ送るね！")
             
+            # 写真付きの綺麗なカードを作る
             embed_data = {
                 "title": f"{member['name']}のInstagramが更新されました！",
                 "url": latest["url"],
                 "color": 15893389,
                 "description": latest["caption"]
             }
+            if latest["image"]:
+                embed_data["image"] = {"url": latest["image"]}
+
             payload = {
                 "username": f"{member['name']} Instagram",
                 "embeds": [embed_data]
