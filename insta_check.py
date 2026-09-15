@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 # 井上梨名ちゃんのお名前変更と、新しいメンバーを追加した最新のリストだよ！
 MEMBERS = [
     {"name": "山﨑天", "insta_id": "yamasaki.ten", "webhook_env": "WEBHOOK_TEN"},
-    {"name": "谷口愛季", "insta_id": "airi.taniguchi.official", "webhook_env": "WEBHOOK_TANIGUCHI"},
+    {"name": "谷口愛季", "insta_id": "airi.taniguchi.official", "webhook_env": "WEBHOOK_AIRI"},
     {"name": "井上梨名", "insta_id": "inoue.rina_official", "webhook_env": "WEBHOOK_RINA_I"},
     {"name": "遠藤光莉", "insta_id": "hikari.endo_official", "webhook_env": "WEBHOOK_HIKARI"},
     {"name": "大園玲", "insta_id": "reinazono_official", "webhook_env": "WEBHOOK_REI"},
