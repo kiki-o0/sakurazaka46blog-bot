@@ -3,14 +3,14 @@ import json
 import requests
 from bs4 import BeautifulSoup
 
-# 井上梨名ちゃんのお名前変更と、新しいメンバーを追加した最新のリストだよ！
+# お名前（First Name）でバッチリ統一された完璧なリストだよ！
 MEMBERS = [
     {"name": "山﨑天", "insta_id": "yamasaki.ten", "webhook_env": "WEBHOOK_TEN"},
     {"name": "谷口愛季", "insta_id": "airi.taniguchi.official", "webhook_env": "WEBHOOK_AIRI"},
     {"name": "井上梨名", "insta_id": "inoue.rina_official", "webhook_env": "WEBHOOK_RINA_I"},
     {"name": "遠藤光莉", "insta_id": "hikari.endo_official", "webhook_env": "WEBHOOK_HIKARI"},
     {"name": "大園玲", "insta_id": "reinazono_official", "webhook_env": "WEBHOOK_REI"},
-    {"name": "大沼晶保", "insta_id": "akiho.onuma_official", "webhook_env": "WEBHOOK_ONUMA"},
+    {"name": "大沼晶保", "insta_id": "akiho.onuma_official", "webhook_env": "WEBHOOK_AKIHO"},
     {"name": "関有美子", "insta_id": "yumiko.seki_official", "webhook_env": "WEBHOOK_YUMIKO"},
     {"name": "武元唯衣", "insta_id": "yui.takemoto_official", "webhook_env": "WEBHOOK_YUI"},
     {"name": "田村保乃", "insta_id": "hono.tamura_official", "webhook_env": "WEBHOOK_HONO"},
@@ -18,10 +18,10 @@ MEMBERS = [
     {"name": "松田里奈", "insta_id": "rina.matsuda_official", "webhook_env": "WEBHOOK_RINA_M"},
     {"name": "守屋麗奈", "insta_id": "rena.moriya_official", "webhook_env": "WEBHOOK_RENA"},
     {"name": "石森璃花", "insta_id": "rika.ishimori_official", "webhook_env": "WEBHOOK_RIKA"},
-    {"name": "遠藤理子", "insta_id": "riko.endo_official", "webhook_env": "WEBHOOK_ENDO_R"},
-    {"name": "小田倉麗奈", "insta_id": "reina.odakura_official", "webhook_env": "WEBHOOK_ODAKURA"},
-    {"name": "中嶋優月", "insta_id": "yuzuki.nakajima_official", "webhook_env": "WEBHOOK_NAKAJIMA"},
-    {"name": "村井優", "insta_id": "yu.murai_official", "webhook_env": "WEBHOOK_MURAI"},
+    {"name": "遠藤理子", "insta_id": "riko.endo_official", "webhook_env": "WEBHOOK_RIKO"},
+    {"name": "小田倉麗奈", "insta_id": "reina.odakura_official", "webhook_env": "WEBHOOK_REINA_O"},
+    {"name": "中嶋優月", "insta_id": "yuzuki.nakajima_official", "webhook_env": "WEBHOOK_YUZUKI"},
+    {"name": "村井優", "insta_id": "yu.murai_official", "webhook_env": "WEBHOOK_YU"},
     {"name": "村山美羽", "insta_id": "miu.murayama_official", "webhook_env": "WEBHOOK_MIU"},
     {"name": "小池美波", "insta_id": "minami.koike_official", "webhook_env": "WEBHOOK_MINAMI"},
     {"name": "菅井友香", "insta_id": "yuka.sugai_official", "webhook_env": "WEBHOOK_YUUKA"},
