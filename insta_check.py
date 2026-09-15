@@ -1,9 +1,9 @@
 import os
 import json
 import requests
-import instaloader
+from bs4 import BeautifulSoup
 
-# お名前でバッチリ統一された完璧なリストだよ！
+# お名前でバッチリ統一された完璧なリスト！
 MEMBERS = [
     {"name": "山﨑天", "insta_id": "yamasaki.ten", "webhook_env": "WEBHOOK_TEN"},
     {"name": "谷口愛季", "insta_id": "airi.taniguchi.official", "webhook_env": "WEBHOOK_AIRI"},
@@ -29,22 +29,31 @@ MEMBERS = [
 
 HISTORY_FILE = "insta_history.json"
 
-def get_latest_post_instaloader(insta_id, cookie_value):
-    print(f"👀 {insta_id} のページを確認中...")
+def get_latest_post_safe(insta_id, cookie_value):
+    print(f"👀 {insta_id} のページをサッと確認中...")
+    url = f"https://www.instagram.com/{insta_id}/"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Cookie": f"sessionid={cookie_value}"
+    }
+    
     try:
-        L = instaloader.Instaloader(quiet=True)
-        L.context._session.cookies.set('sessionid', cookie_value, domain='.instagram.com')
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code != 200:
+            return None
+
+        soup = BeautifulSoup(response.text, "html.parser")
         
-        profile = instaloader.Profile.from_username(L.context, insta_id)
-        post = next(profile.get_posts())
+        desc_tag = soup.find("meta", property="og:description")
+        caption = desc_tag.get("content", "Instagramが更新されました！") if desc_tag else "Instagramが更新されました！"
         
         return {
-            "id": post.shortcode,
-            # Instagramの代わりに、Discordが写真を見れる魔法のURL（ddinstagram）に変えるよ！
-            "url": f"https://ddinstagram.com/p/{post.shortcode}/"
+            "id": caption[:50],
+            "url": f"https://www.instagram.com/{insta_id}/",
+            "caption": caption
         }
     except Exception as e:
-        print(f"❌ エラーになっちゃった: {e}")
         return None
 
 def main():
@@ -52,7 +61,6 @@ def main():
     
     cookie_value = os.environ.get("INSTA_COOKIE")
     if not cookie_value:
-        print("❌ 合鍵が見つからないよ！")
         return
 
     history = {}
@@ -70,18 +78,23 @@ def main():
         if not webhook_url:
             continue
 
-        latest = get_latest_post_instaloader(member["insta_id"], cookie_value)
+        latest = get_latest_post_safe(member["insta_id"], cookie_value)
         if not latest:
             continue
 
         last_id = history.get(member["insta_id"])
         if last_id != latest["id"]:
-            print(f"✨ {member['name']} の新しい投稿を発見！Discordへ送るね！")
+            print(f"✨ {member['name']} の新しい動きを発見！Discordへ送るね！")
             
-            # 難しい設定はナシ！魔法のURLを送るだけでDiscordが綺麗なカードを作ってくれるよ！
+            embed_data = {
+                "title": f"{member['name']}のInstagramが更新されました！",
+                "url": latest["url"],
+                "color": 15893389,
+                "description": latest["caption"]
+            }
             payload = {
                 "username": f"{member['name']} Instagram",
-                "content": f"✨ **{member['name']}** がInstagramを更新したよ！\n{latest['url']}"
+                "embeds": [embed_data]
             }
             requests.post(webhook_url, json=payload, timeout=10)
             history[member["insta_id"]] = latest["id"]
