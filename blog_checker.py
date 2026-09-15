@@ -39,8 +39,13 @@ def save_cache(cache):
 
 def check_blog():
     cache = load_cache()
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    # 🌟 変装アイテム：警備員を騙すために、より人間っぽく見せる設定！
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8"
+    }
 
+    print("=== ブログ確認スタート ===")
     for member_id, webhook_url in WEBHOOKS.items():
         if not webhook_url:
             continue
@@ -49,10 +54,22 @@ def check_blog():
         
         try:
             res = requests.get(url, headers=headers, timeout=15)
+            
+            # 🌟 拡声器：ロボットに今の状況を叫ばせる！
+            if res.status_code == 403:
+                print(f"[{member_id}] ❌ 警備員にブロックされました (403 Forbidden)")
+                continue
+            elif res.status_code != 200:
+                print(f"[{member_id}] ⚠️ エラー発生: {res.status_code}")
+                continue
+            else:
+                print(f"[{member_id}] 🚪 ページに入れました！記事を探します...")
+
             soup = BeautifulSoup(res.text, "html.parser")
             
             latest_post = soup.find("li", class_="box")
             if not latest_post:
+                print(f"[{member_id}] 🤷‍♂️ 記事が見つかりません")
                 continue
                 
             post_a = latest_post.find("a")
@@ -60,7 +77,6 @@ def check_blog():
                 continue
             post_url = "https://sakurazaka46.com" + post_a["href"]
             
-            # 【修正点】タイトルと名前がない場合はパニックにならずスキップする安全装置
             title_tag = latest_post.find("p", class_="title")
             name_tag = latest_post.find("p", class_="name")
             if not title_tag or not name_tag:
@@ -76,13 +92,19 @@ def check_blog():
 
             if cache.get(member_id) != post_url:
                 if member_id in cache:
+                    print(f"[{member_id}] ✨ 新しいブログ発見！Discordに送ります！")
                     send_discord(webhook_url, name, title, post_url, img_url)
+                else:
+                    print(f"[{member_id}] 📝 初回の記録としてメモ帳に書きました（通知はしません）")
                 cache[member_id] = post_url
+            else:
+                print(f"[{member_id}] ➡️ 新しい記事はないみたいです")
                 
         except Exception as e:
             print(f"[{member_id}] エラー: {e}")
             
     save_cache(cache)
+    print("=== 確認終了 ===")
 
 def send_discord(webhook_url, name, title, post_url, img_url):
     payload = {
