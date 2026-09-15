@@ -1,7 +1,6 @@
 import os
 import json
 import requests
-from bs4 import BeautifulSoup
 
 # お名前でバッチリ統一されたリスト！
 MEMBERS = [
@@ -28,49 +27,46 @@ MEMBERS = [
 ]
 
 HISTORY_FILE = "insta_history.json"
-# さっき見せてくれた「あなたの最強アンテナ」のURLだよ！
-RSSHUB_DOMAIN = "https://rss-hub-wheat-five.vercel.app"
 
-def get_latest_post_via_rss(insta_id):
-    print(f"👀 {insta_id} をアンテナ経由で安全に確認中...")
-    url = f"{RSSHUB_DOMAIN}/instagram/user/{insta_id}"
+def get_latest_post_ninja(insta_id, cookie_value):
+    print(f"👀 {insta_id} を忍者ルートで確認中...")
+    # Instagramアプリが裏で使っている公式のデータ通信路
+    url = f"https://i.instagram.com/api/v1/users/web_profile_info/?username={insta_id}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-IG-App-ID": "936619743392459", # インスタ公式のパスポート番号（固定値）
+        "Cookie": f"sessionid={cookie_value}"
+    }
     
     try:
-        # アンテナからデータをもらってくる
-        response = requests.get(url, timeout=15)
+        # 10秒でスパッと諦める設定（絶対にフリーズさせない！）
+        response = requests.get(url, headers=headers, timeout=10)
+        
         if response.status_code != 200:
-            print(f"❌ アンテナがお休み中みたい（{response.status_code}）")
+            print(f"❌ 警備員に弾かれました（{response.status_code}）")
             return None
 
-        # データを読み解く
-        soup = BeautifulSoup(response.text, "html.parser")
-        items = soup.find_all("item")
+        # 抜き取ったデータを解読
+        data = response.json()
+        edges = data.get("data", {}).get("user", {}).get("edge_owner_to_timeline_media", {}).get("edges", [])
         
-        if not items:
+        if not edges:
+            return None
+            
+        # 最新の投稿（1件目）のIDを抜き取る
+        post = edges[0].get("node", {})
+        shortcode = post.get("shortcode")
+        
+        if not shortcode:
             return None
 
-        # 一番新しい投稿（1番上のアイテム）を取り出す
-        latest_item = items[0]
-        link = latest_item.find("link").text if latest_item.find("link") else f"https://www.instagram.com/{insta_id}/"
-        title = latest_item.find("title").text if latest_item.find("title") else "Instagram更新！"
-        
-        # 写真（imgタグ）を探し出す
-        description = latest_item.find("description").text if latest_item.find("description") else ""
-        img_url = ""
-        if description:
-            desc_soup = BeautifulSoup(description, "html.parser")
-            img_tag = desc_soup.find("img")
-            if img_tag and img_tag.get("src"):
-                img_url = img_tag.get("src")
-
-        guid = latest_item.find("guid").text if latest_item.find("guid") else link
-
+        # 魔法のURL（ddinstagram）に合体させて返す！
         return {
-            "id": guid,
-            "url": link,
-            "caption": title,
-            "image": img_url
+            "id": shortcode,
+            "url": f"https://ddinstagram.com/p/{shortcode}/"
         }
+        
     except Exception as e:
         print(f"❌ エラーになっちゃった: {e}")
         return None
@@ -78,6 +74,11 @@ def get_latest_post_via_rss(insta_id):
 def main():
     print("=== インスタ確認スタート ===")
     
+    cookie_value = os.environ.get("INSTA_COOKIE")
+    if not cookie_value:
+        print("❌ 合鍵が見つからないよ！")
+        return
+
     history = {}
     if os.path.exists(HISTORY_FILE):
         try:
@@ -93,8 +94,7 @@ def main():
         if not webhook_url:
             continue
 
-        # アンテナを使って確認するよ！合鍵（Cookie）はもういらない！
-        latest = get_latest_post_via_rss(member["insta_id"])
+        latest = get_latest_post_ninja(member["insta_id"], cookie_value)
         if not latest:
             continue
 
@@ -102,19 +102,10 @@ def main():
         if last_id != latest["id"]:
             print(f"✨ {member['name']} の新しい投稿を発見！Discordへ送るね！")
             
-            # 写真付きの綺麗なカードを作る
-            embed_data = {
-                "title": f"{member['name']}のInstagramが更新されました！",
-                "url": latest["url"],
-                "color": 15893389,
-                "description": latest["caption"]
-            }
-            if latest["image"]:
-                embed_data["image"] = {"url": latest["image"]}
-
+            # 文字の中にURLを入れるだけで、Discordが勝手に写真カードを展開してくれます
             payload = {
                 "username": f"{member['name']} Instagram",
-                "embeds": [embed_data]
+                "content": f"✨ **{member['name']}** がInstagramを更新したよ！\n{latest['url']}"
             }
             requests.post(webhook_url, json=payload, timeout=10)
             history[member["insta_id"]] = latest["id"]
