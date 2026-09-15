@@ -3,9 +3,28 @@ import json
 import requests
 from bs4 import BeautifulSoup
 
+# 井上梨名ちゃんのお名前変更と、新しいメンバーを追加した最新のリストだよ！
 MEMBERS = [
     {"name": "山﨑天", "insta_id": "yamasaki.ten", "webhook_env": "WEBHOOK_TEN"},
-    {"name": "谷口愛季", "insta_id": "airi.taniguchi.official", "webhook_env": "WEBHOOK_AIRI"},
+    {"name": "谷口愛季", "insta_id": "airi.taniguchi.official", "webhook_env": "WEBHOOK_TANIGUCHI"},
+    {"name": "井上梨名", "insta_id": "inoue.rina_official", "webhook_env": "WEBHOOK_RINA_I"},
+    {"name": "遠藤光莉", "insta_id": "hikari.endo_official", "webhook_env": "WEBHOOK_HIKARI"},
+    {"name": "大園玲", "insta_id": "reinazono_official", "webhook_env": "WEBHOOK_REI"},
+    {"name": "大沼晶保", "insta_id": "akiho.onuma_official", "webhook_env": "WEBHOOK_ONUMA"},
+    {"name": "関有美子", "insta_id": "yumiko.seki_official", "webhook_env": "WEBHOOK_YUMIKO"},
+    {"name": "武元唯衣", "insta_id": "yui.takemoto_official", "webhook_env": "WEBHOOK_YUI"},
+    {"name": "田村保乃", "insta_id": "hono.tamura_official", "webhook_env": "WEBHOOK_HONO"},
+    {"name": "藤吉夏鈴", "insta_id": "karin.fujiyoshi_official", "webhook_env": "WEBHOOK_KARIN"},
+    {"name": "松田里奈", "insta_id": "rina.matsuda_official", "webhook_env": "WEBHOOK_RINA_M"},
+    {"name": "守屋麗奈", "insta_id": "rena.moriya_official", "webhook_env": "WEBHOOK_RENA"},
+    {"name": "石森璃花", "insta_id": "rika.ishimori_official", "webhook_env": "WEBHOOK_RIKA"},
+    {"name": "遠藤理子", "insta_id": "riko.endo_official", "webhook_env": "WEBHOOK_ENDO_R"},
+    {"name": "小田倉麗奈", "insta_id": "reina.odakura_official", "webhook_env": "WEBHOOK_ODAKURA"},
+    {"name": "中嶋優月", "insta_id": "yuzuki.nakajima_official", "webhook_env": "WEBHOOK_NAKAJIMA"},
+    {"name": "村井優", "insta_id": "yu.murai_official", "webhook_env": "WEBHOOK_MURAI"},
+    {"name": "村山美羽", "insta_id": "miu.murayama_official", "webhook_env": "WEBHOOK_MIU"},
+    {"name": "小池美波", "insta_id": "minami.koike_official", "webhook_env": "WEBHOOK_MINAMI"},
+    {"name": "菅井友香", "insta_id": "yuka.sugai_official", "webhook_env": "WEBHOOK_YUUKA"},
 ]
 
 HISTORY_FILE = "insta_history.json"
@@ -27,8 +46,6 @@ def get_latest_post_with_cookie(insta_id, cookie_value):
 
         soup = BeautifulSoup(response.text, "html.parser")
         
-        # 写真や詳しい文章の目印（OGPタグ）をしっかりキャッチするよ
-        image_tag = soup.find("meta", property="property", content=True) # 予備
         img_url = ""
         img_tag_real = soup.find("meta", property="og:image")
         if img_tag_real:
@@ -37,10 +54,8 @@ def get_latest_post_with_cookie(insta_id, cookie_value):
         desc_tag = soup.find("meta", property="og:description")
         caption = desc_tag.get("content", "Instagramが更新されました！") if desc_tag else "Instagramが更新されました！"
         
-        print(f"✅ 写真と文章をキャッチしました！")
-
         return {
-            "id": caption[:50], # 文章の最初の部分を記録用の目印にするよ
+            "id": caption[:50],
             "url": f"https://www.instagram.com/{insta_id}/",
             "caption": caption,
             "image": img_url
@@ -70,6 +85,7 @@ def main():
     for member in MEMBERS:
         webhook_url = os.environ.get(member["webhook_env"])
         if not webhook_url:
+            print(f"⚠️ {member['name']} のWebhook住所が見つからないのでスキップします")
             continue
 
         latest = get_latest_post_with_cookie(member["insta_id"], cookie_value)
@@ -80,7 +96,6 @@ def main():
         if last_id != latest["id"]:
             print(f"✨ {member['name']} の新しい動きを発見！Discordへ送るね！")
             
-            # 写真付きの綺麗なカード型（Embed）にしてDiscordへ飛ばすよ
             embed_data = {
                 "title": f"{member['name']}のInstagramが更新されました！",
                 "url": latest["url"],
