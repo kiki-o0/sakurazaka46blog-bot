@@ -24,6 +24,8 @@ jobs:
         env:
           WEBHOOK_TEN: ${{ secrets.WEBHOOK_TEN }}
           WEBHOOK_AIRI: ${{ secrets.WEBHOOK_AIRI }}
+          INSTA_COOKIE: ${{ secrets.INSTA_COOKIE }}
+
         run: python insta_check.py
 
       - name: Commit and push changes (Cache)
