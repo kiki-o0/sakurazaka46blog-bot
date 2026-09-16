@@ -1,62 +1,54 @@
 import os
 import json
 import requests
-from bs4 import BeautifulSoup
 
-# テスト用のWebhook（山﨑天ちゃん専用チャンネルのもの）
-# 後ほどGitHubのSecretsに登録するか、ここに直接テスト用URLを貼ってもOKです！
 WEBHOOK_URL = os.environ.get("WEBHOOK_TEST_TEN")
 
-def test_extract():
-    print("=== 山﨑天ちゃんデータ持ち帰り実験スタート ===")
+def test_timeline_extract():
+    print("=== タイムラインのぞき見実験スタート ===")
     
-    insta_id = "yamasaki.ten"
-    fetch_url = f"https://www.instagram.com/{insta_id}/"
+    # プロフィールではなく「タイムライン（自分のホーム画面）」の合図に突撃する！
+    fetch_url = "https://www.instagram.com/api/v1/feed/timeline/"
     
-    # 警備員対策の変装用ヘッダー
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Cookie": f"sessionid={os.environ.get('INSTA_COOKIE', '')}"
+        "Cookie": f"sessionid={os.environ.get('INSTA_COOKIE', '')}",
+        # ※Instagramの裏の合図に話しかけるときは、この特別な合言葉が必要になります！
+        "X-IG-App-ID": "936619743392459" 
     }
     
     try:
         response = requests.get(fetch_url, headers=headers, timeout=15)
-        print(f"📡 Instagramからの返事: {response.status_code}")
+        print(f"📡 タイムラインからの返事: {response.status_code}")
         
         if response.status_code != 200:
-            print("❌ ページに入れませんでした…")
+            print(f"❌ タイムラインに入れませんでした… (返事: {response.status_code})")
             return
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        # 帰ってきたデータをパズルみたいに解読する
+        data = response.json()
         
-        # ページ全体の構造から、隠れているデータ（文字や画像のヒント）を探す！
-        desc_tag = soup.find("meta", property="og:description")
-        caption = desc_tag.get("content", "データなし") if desc_tag else "データなし"
-        
-        img_tag = soup.find("meta", property="og:image")
-        image_url = img_tag.get("content", "画像データなし") if img_tag else "画像データなし"
-
-        print(f"📝 持ち帰った文章: {caption}")
-        print(f"🖼️ 持ち帰った画像の住所: {image_url}")
-
-        # Discordのテスト部屋に、持ち帰れたデータをそのまま送ってみる！
-        if WEBHOOK_URL:
-            payload = {
-                "username": "天ちゃんデータ実験室",
-                "embeds": [{
-                    "title": "実験結果：持ち帰れたデータ",
-                    "description": f"**文章:**\n{caption}\n\n**画像の住所:**\n{image_url}",
-                    "color": 65280
-                }]
-            }
-            if image_url.startswith("http"):
-                # もし画像の住所が取れていれば、Discordに直接画像カードを表示させてみる！
-                payload["embeds"][0]["image"] = {"url": image_url}
-                
-            requests.post(WEBHOOK_URL, json=payload, timeout=10)
-            print("📤 テスト部屋へデータを送信しました！")
+        # タイムラインに流れてきた最新の投稿をチェック！
+        items = data.get("items", [])
+        if items:
+            print(f"✨ 投稿が見つかりました！（合計 {len(items)} 件）")
+            # とりあえず一番上の最新のものの情報を少しだけDiscordに送ってみる
+            first_item = items[0]
+            caption_text = first_item.get("caption", {}).get("text", "文章なし")
+            
+            if WEBHOOK_URL:
+                payload = {
+                    "username": "タイムライン実験室",
+                    "embeds": [{
+                        "title": "タイムラインからの拾い物成功！",
+                        "description": f"**最初の文章:**\n{caption_text[:100]}...",
+                        "color": 65280
+                    }]
+                }
+                requests.post(WEBHOOK_URL, json=payload, timeout=10)
+                print("📤 Discordにテスト送信しました！")
         else:
-            print("⚠️ WEBHOOK_TEST_TEN の住所が設定されていないよ！")
+            print("📭 投稿が何も流れてきませんでした…")
 
     except Exception as e:
         print(f"💥 エラー発生: {e}")
@@ -64,5 +56,4 @@ def test_extract():
     print("=== 実験終了 ===")
 
 if __name__ == "__main__":
-    test_extract()
-
+    test_timeline_extract()
