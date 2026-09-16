@@ -1,7 +1,6 @@
 import os
 import json
 from datetime import datetime, timezone, timedelta
-
 import requests
 
 HISTORY_FILE = "test_ten_history.json"
@@ -10,8 +9,6 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_TEST_TEN")
 JST = timezone(timedelta(hours=9))
 now = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S JST")
 
-# この文字を変えると「新しい投稿を発見した」扱いになる。
-# 同じ値のままなら、2回目以降はDiscordへ送らない。
 TEST_POST_ID = "test-post-001"
 
 
@@ -38,13 +35,9 @@ def send_notification():
         "username": "山﨑天 Instagram（テスト）",
         "embeds": [
             {
-                "title": "🌸 山﨑天のInstagramを確認",
+                "title": "山﨑天のInstagramを確認",
                 "url": profile_url,
-                "description": (
-                    "テスト用の更新検知通知です。
-"
-                    "タイトルを押すとInstagramプロフィールを開けます。"
-                ),
+                "description": "テスト用の更新検知通知です。タイトルを押すとInstagramプロフィールを開けます。",
                 "color": 15893389,
                 "fields": [
                     {
@@ -72,24 +65,20 @@ def send_notification():
 
 def main():
     if not WEBHOOK_URL:
-        raise RuntimeError(
-            "WEBHOOK_TEST_TEN が GitHub Secrets に設定されていません。"
-        )
+        raise RuntimeError("WEBHOOK_TEST_TEN が GitHub Secrets に設定されていません。")
 
     history = load_history()
     previous_id = history.get("latest_post_id")
 
     if previous_id == TEST_POST_ID:
-        print("➡️ 前回と同じIDです。Discordには通知しません。")
+        print("同じIDです。Discordには通知しません。")
         return
 
     send_notification()
-
     history["latest_post_id"] = TEST_POST_ID
     history["updated_at"] = now
     save_history(history)
-
-    print("✅ テスト通知を送信し、履歴ファイルを更新しました。")
+    print("テスト通知を送信し、履歴ファイルを更新しました。")
 
 
 if __name__ == "__main__":
