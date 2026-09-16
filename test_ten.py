@@ -1,59 +1,73 @@
 import os
-import json
 import requests
+from bs4 import BeautifulSoup
 
+# 天ちゃんテスト部屋の住所
 WEBHOOK_URL = os.environ.get("WEBHOOK_TEST_TEN")
 
-def test_timeline_extract():
-    print("=== タイムラインのぞき見実験スタート ===")
+def fetch_ten_blog():
+    print("=== 天ちゃん公式ブログお迎え作戦スタート ===")
     
-    # プロフィールではなく「タイムライン（自分のホーム画面）」の合図に突撃する！
-    fetch_url = "https://www.instagram.com/api/v1/feed/timeline/"
+    # 1. 櫻坂46公式サイトの「山﨑天ちゃんの個別ブログ一覧」の住所
+    # （ct=53 が天ちゃんの背番号みたいなものです！）
+    url = "https://sakurazaka46.com/s/s46/diary/blog/list?ima=0000&ct=53"
     
+    # ロボット感を少し消すための軽い変装
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Cookie": f"sessionid={os.environ.get('INSTA_COOKIE', '')}",
-        # ※Instagramの裏の合図に話しかけるときは、この特別な合言葉が必要になります！
-        "X-IG-App-ID": "936619743392459" 
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
     
     try:
-        response = requests.get(fetch_url, headers=headers, timeout=15)
-        print(f"📡 タイムラインからの返事: {response.status_code}")
+        # 2. ブログのページにアクセス！
+        response = requests.get(url, headers=headers, timeout=10)
+        response.encoding = response.apparent_encoding
         
-        if response.status_code != 200:
-            print(f"❌ タイムラインに入れませんでした… (返事: {response.status_code})")
-            return
-
-        # 帰ってきたデータをパズルみたいに解読する
-        data = response.json()
-        
-        # タイムラインに流れてきた最新の投稿をチェック！
-        items = data.get("items", [])
-        if items:
-            print(f"✨ 投稿が見つかりました！（合計 {len(items)} 件）")
-            # とりあえず一番上の最新のものの情報を少しだけDiscordに送ってみる
-            first_item = items[0]
-            caption_text = first_item.get("caption", {}).get("text", "文章なし")
+        if response.status_code == 200:
+            print("✅ 天ちゃんのブログページに入れました！")
             
-            if WEBHOOK_URL:
-                payload = {
-                    "username": "タイムライン実験室",
-                    "embeds": [{
-                        "title": "タイムラインからの拾い物成功！",
-                        "description": f"**最初の文章:**\n{caption_text[:100]}...",
-                        "color": 65280
-                    }]
-                }
-                requests.post(WEBHOOK_URL, json=payload, timeout=10)
-                print("📤 Discordにテスト送信しました！")
+            # 3. ページの中身（設計図）を読み解く
+            soup = BeautifulSoup(response.text, "html.parser")
+            
+            # 4. 「最新の投稿のデータ」を探す
+            # 公式ブログの仕組み上、一番最初に出てくる記事の箱（box）を探します
+            latest_article = soup.find("li", class_="box")
+            
+            if latest_article:
+                # ブログタイトル取得
+                title_tag = latest_article.find("h1", class_="title")
+                title = title_tag.text.strip() if title_tag else "タイトルなし"
+                
+                # 画像データ取得（記事のURL）
+                # ※公式は一覧ページに画像がないことが多いので、まずは記事のリンク先を取ります
+                link_tag = latest_article.find("a")
+                article_link = "https://sakurazaka46.com" + link_tag["href"] if link_tag else url
+                
+                print(f"📝 見つけたタイトル: {title}")
+                print(f"🔗 記事の住所: {article_link}")
+                
+                # 5. Discordに綺麗に送る
+                if WEBHOOK_URL:
+                    payload = {
+                        "username": "櫻坂46 ブログ通知ロボ",
+                        "embeds": [
+                            {
+                                "author": {"name": "山﨑 天"},
+                                "title": title,
+                                "url": article_link,
+                                "description": "天ちゃんの新しいブログが更新されたよ！",
+                                "color": 16777215 # 櫻坂のイメージカラー（白）
+                            }
+                        ]
+                    }
+                    requests.post(WEBHOOK_URL, json=payload)
+                    print("📤 天ちゃんの部屋に通知を送りました！")
+            else:
+                print("⚠️ 記事の箱が見つかりませんでした。")
         else:
-            print("📭 投稿が何も流れてきませんでした…")
-
+            print(f"❌ ページに入れませんでした（お返事: {response.status_code}）")
+            
     except Exception as e:
         print(f"💥 エラー発生: {e}")
 
-    print("=== 実験終了 ===")
-
 if __name__ == "__main__":
-    test_timeline_extract()
+    fetch_ten_blog()
