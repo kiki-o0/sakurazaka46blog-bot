@@ -139,7 +139,7 @@ def check_blog():
 def send_discord_album(webhook_url, name, title, post_url, image_urls):
     if not image_urls:
         payload = {
-            "username": "櫻坂通知ロボ",
+            "username": "櫻坂blog通知",
             "embeds": [{
                 "author": {"name": name},
                 "title": f"【ブログ更新】{title}",
