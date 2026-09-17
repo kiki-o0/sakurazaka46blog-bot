@@ -50,7 +50,7 @@ jobs:
           WEBHOOK_MIU: ${{ secrets.WEBHOOK_MIU }}
           WEBHOOK_MINAMI: ${{ secrets.WEBHOOK_MINAMI }}
           WEBHOOK_YUUKA: ${{ secrets.WEBHOOK_YUUKA }}
-        run: python main.py
+        run: python insta_check.py
 
       - name: Save history
         uses: stefanzweifel/git-auto-commit-action@v5
