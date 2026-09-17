@@ -1,28 +1,35 @@
-name: Insta Checker
+name: Instagram Monitor
 
 on:
   schedule:
-    - cron: '0 * * * *'
-
+    - cron: '0 */6 * * *'
   workflow_dispatch:
+
+concurrency:
+  group: instagram-monitor
+  cancel-in-progress: false
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests instaloader beautifulsoup4
+        run: pip install curl_cffi requests
 
-      - name: Run Insta Check
+      - name: Run Instagram monitor
         env:
+          INSTA_COOKIE: ${{ secrets.INSTA_COOKIE }}
           WEBHOOK_TEN: ${{ secrets.WEBHOOK_TEN }}
           WEBHOOK_AIRI: ${{ secrets.WEBHOOK_AIRI }}
           WEBHOOK_RINA_I: ${{ secrets.WEBHOOK_RINA_I }}
@@ -43,14 +50,10 @@ jobs:
           WEBHOOK_MIU: ${{ secrets.WEBHOOK_MIU }}
           WEBHOOK_MINAMI: ${{ secrets.WEBHOOK_MINAMI }}
           WEBHOOK_YUUKA: ${{ secrets.WEBHOOK_YUUKA }}
-          INSTA_COOKIE: ${{ secrets.INSTA_COOKIE }}
+        run: python main.py
 
-        run: python insta_check.py
-
-      - name: Commit and push changes (Cache)
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add insta_history.json || true
-          git commit -m "Update insta cache [skip ci]" || true
-          git push || true
+      - name: Save history
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update Instagram history [skip ci]"
+          file_pattern: "insta_history.json"
