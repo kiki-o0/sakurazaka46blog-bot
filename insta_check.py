@@ -17,7 +17,7 @@ MAX_POSTS_TO_CHECK = 5
 REQUEST_INTERVAL_SECONDS = 3
 DISCORD_INTERVAL_SECONDS = 1
 
-DEFAULT_USER_AGENT = (
+USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/120.0.0.0 Safari/537.36"
@@ -27,88 +27,88 @@ DEFAULT_USER_AGENT = (
 MEMBERS = [
     {
         "username": "yamasaki.ten",
-        "webhook_env": "WEBHOOK_YAMASAKI",
+        "webhook_env": "WEBHOOK_TEN",
     },
     {
         "username": "airi.taniguchi.official",
-        "webhook_env": "WEBHOOK_TANIGUCHI",
+        "webhook_env": "WEBHOOK_AIRI",
     },
     {
         "username": "rina_ino_",
-        "webhook_env": "WEBHOOK_INO",
+        "webhook_env": "WEBHOOK_RINA_I",
     },
     {
         "username": "endohikari_official",
-        "webhook_env": "WEBHOOK_ENDO_H",
+        "webhook_env": "WEBHOOK_HIKARI",
     },
     {
         "username": "ozonoreis2",
-        "webhook_env": "WEBHOOK_OZONO",
+        "webhook_env": "WEBHOOK_REI",
     },
     {
         "username": "akiho_onuma_official",
-        "webhook_env": "WEBHOOK_ONUMA",
+        "webhook_env": "WEBHOOK_AKIHO",
     },
     {
         "username": "seki_yumiko_official",
-        "webhook_env": "WEBHOOK_SEKI",
+        "webhook_env": "WEBHOOK_YUMIKO",
     },
     {
         "username": "takemotoyui_official",
-        "webhook_env": "WEBHOOK_TAKEMOTO",
+        "webhook_env": "WEBHOOK_YUI",
     },
     {
         "username": "tamura.hono.official",
-        "webhook_env": "WEBHOOK_TAMURA",
+        "webhook_env": "WEBHOOK_HONO",
     },
     {
         "username": "fujiyoshi.karin",
-        "webhook_env": "WEBHOOK_FUJIYOSHI",
+        "webhook_env": "WEBHOOK_KARIN",
     },
     {
         "username": "matsudarina_official",
-        "webhook_env": "WEBHOOK_MATSUDA",
+        "webhook_env": "WEBHOOK_RINA_M",
     },
     {
         "username": "rena_moriya_official",
-        "webhook_env": "WEBHOOK_MORIYA",
+        "webhook_env": "WEBHOOK_RENA",
     },
     {
         "username": "rika.ishimori.official",
-        "webhook_env": "WEBHOOK_ISHIMORI",
+        "webhook_env": "WEBHOOK_RIKA",
     },
     {
         "username": "riko.endo_official",
-        "webhook_env": "WEBHOOK_ENDO_R",
+        "webhook_env": "WEBHOOK_RIKO",
     },
     {
         "username": "reinaodakura_official",
-        "webhook_env": "WEBHOOK_ODAKURA",
+        "webhook_env": "WEBHOOK_REINA_O",
     },
     {
         "username": "yuzuki_nakashima_official",
-        "webhook_env": "WEBHOOK_NAKASHIMA",
+        "webhook_env": "WEBHOOK_YUZUKI",
     },
     {
         "username": "yu.murai_official",
-        "webhook_env": "WEBHOOK_MURAI",
+        "webhook_env": "WEBHOOK_YU",
     },
     {
         "username": "miumurayama_official",
-        "webhook_env": "WEBHOOK_MURAYAMA",
+        "webhook_env": "WEBHOOK_MIU",
     },
     {
         "username": "miichan_official",
-        "webhook_env": "WEBHOOK_MIICHAN",
+        "webhook_env": "WEBHOOK_MINAMI",
     },
     {
         "username": "yuuka_sugai_official",
-        "webhook_env": "WEBHOOK_SUGAI",
+        "webhook_env": "WEBHOOK_YUUKA",
     },
 ]
 
 
-def empty_history():
+def make_empty_history():
     return {
         member["username"]: []
         for member in MEMBERS
@@ -116,24 +116,31 @@ def empty_history():
 
 
 def load_history():
+    empty = make_empty_history()
+
     if not os.path.exists(HISTORY_FILE):
-        print("履歴ファイルがありません。新規作成します")
-        return empty_history(), True
+        print("履歴ファイルがありません")
+        print("初回実行として処理します")
+        return empty, True
 
     try:
-        with open(HISTORY_FILE, "r", encoding="utf-8") as file:
-            loaded = json.load(file)
+        with open(
+            HISTORY_FILE,
+            "r",
+            encoding="utf-8",
+        ) as file:
+            old_history = json.load(file)
     except Exception as error:
-        print("履歴ファイルを読み込めません:", error)
-        print("空の履歴として開始します")
-        return empty_history(), True
+        print("履歴ファイルの読み込みに失敗:", error)
+        print("空の履歴として処理します")
+        return empty, True
 
-    migrated = False
     history = {}
+    needs_migration = False
 
     for member in MEMBERS:
         username = member["username"]
-        value = loaded.get(username, [])
+        value = old_history.get(username, [])
 
         if isinstance(value, list):
             history[username] = [
@@ -143,16 +150,20 @@ def load_history():
             ]
         else:
             history[username] = []
-            migrated = True
+            needs_migration = True
 
-    if set(loaded.keys()) != set(history.keys()):
-        migrated = True
+    if set(old_history.keys()) != set(history.keys()):
+        needs_migration = True
 
-    return history, migrated
+    return history, needs_migration
 
 
 def save_history(history):
-    with open(HISTORY_FILE, "w", encoding="utf-8") as file:
+    with open(
+        HISTORY_FILE,
+        "w",
+        encoding="utf-8",
+    ) as file:
         json.dump(
             history,
             file,
@@ -160,28 +171,28 @@ def save_history(history):
             indent=2,
         )
 
-    print("履歴ファイルを保存しました:", HISTORY_FILE)
+    print("履歴を保存しました")
 
 
-def format_cookie(raw_cookie):
-    raw_cookie = raw_cookie.strip()
+def format_cookie(value):
+    value = value.strip()
 
-    if not raw_cookie:
+    if not value:
         return ""
 
-    if "=" in raw_cookie:
-        return raw_cookie
+    if "=" in value:
+        return value
 
-    return "sessionid=" + raw_cookie
+    return "sessionid=" + value
 
 
-def get_instagram_headers():
+def get_headers():
     raw_cookie = os.environ.get("INSTA_COOKIE", "")
     cookie = format_cookie(raw_cookie)
 
     headers = {
         "X-IG-App-ID": INSTAGRAM_APP_ID,
-        "User-Agent": DEFAULT_USER_AGENT,
+        "User-Agent": USER_AGENT,
         "Accept": "*/*",
     }
 
@@ -191,21 +202,17 @@ def get_instagram_headers():
     return headers
 
 
-def fetch_profile(username):
+def fetch_user(username):
     url = (
         "https://www.instagram.com/api/v1/users/"
         "web_profile_info/"
     )
 
-    params = {
-        "username": username,
-    }
-
     try:
         response = ig_requests.get(
             url,
-            params=params,
-            headers=get_instagram_headers(),
+            params={"username": username},
+            headers=get_headers(),
             impersonate="chrome",
             timeout=30,
         )
@@ -213,39 +220,50 @@ def fetch_profile(username):
         print("Instagram接続エラー:", error)
         return None
 
-    print("Instagram HTTPステータス:", response.status_code)
+    print("HTTPステータス:", response.status_code)
 
     if response.status_code != 200:
-        print("レスポンス先頭:", response.text[:200])
+        print(response.text[:300])
         return None
 
     try:
         data = response.json()
     except ValueError:
-        print("InstagramレスポンスがJSONではありません")
+        print("JSONの解析に失敗しました")
         return None
 
-    user_data = data.get("data", {}).get("user", {})
+    user = data.get("data", {}).get("user", {})
 
-    if not user_data:
+    if not user:
         print("ユーザー情報がありません")
         return None
 
-    return user_data
+    return user
 
 
 def get_caption(node):
-    caption_edges = (
+    edges = (
         node
         .get("edge_media_to_caption", {})
         .get("edges", [])
     )
 
-    if not caption_edges:
+    if not edges:
         return ""
 
-    caption_node = caption_edges[0].get("node", {})
+    caption_node = edges[0].get("node", {})
     return caption_node.get("text", "")
+
+
+def clean_caption(value):
+    if not value:
+        return ""
+
+    value = html.unescape(value)
+    value = re.sub(r"<[^>]*>", " ", value)
+    value = re.sub(r"s+", " ", value)
+
+    return value.strip()
 
 
 def get_image_url(node):
@@ -263,19 +281,22 @@ def get_image_url(node):
     return ""
 
 
-def get_node_images(node):
+def get_images(node):
     images = []
 
-    carousel = node.get("edge_sidecar_to_children", {})
-    carousel_edges = carousel.get("edges", [])
+    sidecar = node.get(
+        "edge_sidecar_to_children",
+        {},
+    )
 
-    if carousel_edges:
-        for child_edge in carousel_edges:
-            child = child_edge.get("node", {})
-            image_url = get_image_url(child)
+    edges = sidecar.get("edges", [])
 
-            if image_url and image_url not in images:
-                images.append(image_url)
+    for edge in edges:
+        child = edge.get("node", {})
+        image_url = get_image_url(child)
+
+        if image_url and image_url not in images:
+            images.append(image_url)
 
     if not images:
         image_url = get_image_url(node)
@@ -286,86 +307,55 @@ def get_node_images(node):
     return images
 
 
-def get_post_url(node):
+def make_post(node):
     shortcode = node.get("shortcode", "")
+    media_id = node.get("id", "")
+    timestamp = node.get(
+        "taken_at_timestamp",
+        0,
+    )
 
-    if not shortcode:
-        return ""
-
-    return "https://www.instagram.com/p/" + shortcode + "/"
-
-
-def get_post_id(node):
-    shortcode = node.get("shortcode", "")
+    post_id = shortcode or str(media_id)
 
     if shortcode:
-        return shortcode
-
-    media_id = node.get("id", "")
-
-    if media_id:
-        return str(media_id)
-
-    return ""
-
-
-def get_post_timestamp(node):
-    value = node.get("taken_at_timestamp", 0)
+        post_url = (
+            "https://www.instagram.com/p/"
+            + shortcode
+            + "/"
+        )
+    else:
+        post_url = ""
 
     try:
-        return int(value)
+        timestamp = int(timestamp)
     except (TypeError, ValueError):
-        return 0
+        timestamp = 0
 
-
-def format_post_time(timestamp):
-    if not timestamp:
-        return "日時不明"
-
-    try:
-        value = datetime.fromtimestamp(
+    if timestamp:
+        post_date = datetime.fromtimestamp(
             timestamp,
             tz=timezone.utc,
-        )
-
-        return value.astimezone().strftime(
+        ).astimezone().strftime(
             "%Y年%m月%d日 %H:%M"
         )
-    except Exception:
-        return "日時不明"
-
-
-def clean_caption(value):
-    if not value:
-        return ""
-
-    value = html.unescape(value)
-    value = re.sub(r"<[^>]*>", " ", value)
-    value = re.sub(r"s+", " ", value)
-
-    return value.strip()
-
-
-def make_post(node):
-    post_id = get_post_id(node)
-    post_url = get_post_url(node)
-    timestamp = get_post_timestamp(node)
-    caption = clean_caption(get_caption(node))
-    images = get_node_images(node)
+    else:
+        post_date = "日時不明"
 
     return {
         "id": post_id,
         "url": post_url,
+        "date": post_date,
         "timestamp": timestamp,
-        "date": format_post_time(timestamp),
-        "caption": caption,
-        "images": images,
+        "caption": clean_caption(
+            get_caption(node)
+        ),
+        "images": get_images(node),
     }
 
 
-def get_recent_posts(user_data):
+def get_recent_posts(user):
     edges = (
-        user_data
+        user
         .get("edge_owner_to_timeline_media", {})
         .get("edges", [])
     )
@@ -380,7 +370,7 @@ def get_recent_posts(user_data):
             posts.append(post)
 
     posts.sort(
-        key=lambda item: item["timestamp"]
+        key=lambda post: post["timestamp"]
     )
 
     return posts
@@ -394,7 +384,7 @@ def send_webhook(webhook_url, payload):
             timeout=30,
         )
     except requests.RequestException as error:
-        print("Discord通信エラー:", error)
+        print("Discord接続エラー:", error)
         return False
 
     print("Discord HTTPステータス:", response.status_code)
@@ -402,13 +392,11 @@ def send_webhook(webhook_url, payload):
     if response.status_code in (200, 204):
         return True
 
-    print("Discordエラー内容:", response.text[:500])
+    print("Discordエラー:", response.text[:500])
     return False
 
 
-def send_post(webhook_url, username, post):
-    caption = post["caption"]
-
+def send_post(username, webhook_url, post):
     description = (
         "投稿日時: "
         + post["date"]
@@ -417,13 +405,17 @@ def send_post(webhook_url, username, post):
         + post["url"]
     )
 
-    if caption:
-        description = description + "
+    if post["caption"]:
+        description = (
+            description
+            + "
 
-" + caption
+"
+            + post["caption"]
+        )
 
     first_payload = {
-        "username": "Instagram通知 - " + username,
+        "username": "Instagram通知",
         "embeds": [
             {
                 "title": username,
@@ -434,22 +426,28 @@ def send_post(webhook_url, username, post):
         ],
     }
 
-    print("本文メッセージを送信します")
+    print("本文メッセージを送信:", username)
 
-    if not send_webhook(webhook_url, first_payload):
+    if not send_webhook(
+        webhook_url,
+        first_payload,
+    ):
         return False
 
     time.sleep(DISCORD_INTERVAL_SECONDS)
 
     total = len(post["images"])
 
-    for index, image_url in enumerate(post["images"], start=1):
+    for number, image_url in enumerate(
+        post["images"],
+        start=1,
+    ):
         image_payload = {
-            "username": "Instagram通知 - " + username,
+            "username": "Instagram通知",
             "content": (
                 username
                 + " 画像 "
-                + str(index)
+                + str(number)
                 + "/"
                 + str(total)
             ),
@@ -467,10 +465,13 @@ def send_post(webhook_url, username, post):
         print(
             "画像送信:",
             username,
-            str(index) + "/" + str(total),
+            str(number) + "/" + str(total),
         )
 
-        if not send_webhook(webhook_url, image_payload):
+        if not send_webhook(
+            webhook_url,
+            image_payload,
+        ):
             return False
 
         time.sleep(DISCORD_INTERVAL_SECONDS)
@@ -478,40 +479,50 @@ def send_post(webhook_url, username, post):
     return True
 
 
-def process_member(member, history, first_run):
+def process_member(
+    member,
+    history,
+    first_run,
+):
     username = member["username"]
     webhook_env = member["webhook_env"]
-    webhook_url = os.environ.get(webhook_env, "").strip()
+    webhook_url = os.environ.get(
+        webhook_env,
+        "",
+    ).strip()
 
     print()
     print("========================================")
     print("確認対象:", "@" + username)
-    print("Webhook環境変数:", webhook_env)
+    print("Webhook:", webhook_env)
 
-    user_data = fetch_profile(username)
+    user = fetch_user(username)
 
-    if user_data is None:
+    if user is None:
         print("取得失敗:", username)
         return False
 
-    posts = get_recent_posts(user_data)
+    posts = get_recent_posts(user)
 
     if not posts:
-        print("投稿がありません:", username)
+        print("投稿なし:", username)
         return True
 
     print("取得投稿数:", len(posts))
 
-    known_ids = set(history.get(username, []))
+    known_ids = set(
+        history.get(username, [])
+    )
 
     if first_run:
-        print("初回実行のため、通知せず履歴だけ作成します")
+        print("初回のため通知せず履歴だけ作成")
 
         for post in posts:
             if post["id"] not in known_ids:
-                history.setdefault(username, []).append(
-                    post["id"]
-                )
+                history.setdefault(
+                    username,
+                    [],
+                ).append(post["id"])
 
         return True
 
@@ -522,12 +533,11 @@ def process_member(member, history, first_run):
     ]
 
     if not new_posts:
-        print("新着投稿なし:", username)
+        print("新着なし:", username)
         return True
 
     if not webhook_url:
-        print("Webhook未設定のため送信できません")
-        print("環境変数:", webhook_env)
+        print("Webhook未設定:", webhook_env)
         return False
 
     for post in new_posts:
@@ -535,18 +545,19 @@ def process_member(member, history, first_run):
         print("画像枚数:", len(post["images"]))
 
         success = send_post(
-            webhook_url,
             username,
+            webhook_url,
             post,
         )
 
         if not success:
-            print("通知失敗。履歴には追加しません")
+            print("送信失敗。履歴には追加しません")
             return False
 
-        history.setdefault(username, []).append(
-            post["id"]
-        )
+        history.setdefault(
+            username,
+            [],
+        ).append(post["id"])
 
     return True
 
@@ -554,27 +565,29 @@ def process_member(member, history, first_run):
 def main():
     print("=== Instagram全員分チェック開始 ===")
 
-    if not os.environ.get("INSTA_COOKIE", "").strip():
-        print("警告: INSTA_COOKIEが設定されていません")
+    if not os.environ.get(
+        "INSTA_COOKIE",
+        "",
+    ).strip():
+        print("警告: INSTA_COOKIEが未設定です")
 
-    history, history_needs_migration = load_history()
+    history, needs_migration = load_history()
 
-    first_run = history_needs_migration
+    first_run = needs_migration
 
     if first_run:
-        print("初回または履歴形式変更を検出しました")
-        print("今回の実行では通知せず、履歴だけ作成します")
+        print("初回または履歴形式変更です")
+        print("今回は通知せず、履歴だけ作成します")
     else:
-        print("既存履歴を使用して新着投稿を確認します")
+        print("既存履歴と比較して新着を通知します")
 
-    all_success = True
-    history_changed = False
-
-    before_history = json.dumps(
+    original = json.dumps(
         history,
         ensure_ascii=False,
         sort_keys=True,
     )
+
+    all_success = True
 
     for member in MEMBERS:
         success = process_member(
@@ -588,25 +601,22 @@ def main():
 
         time.sleep(REQUEST_INTERVAL_SECONDS)
 
-    after_history = json.dumps(
+    updated = json.dumps(
         history,
         ensure_ascii=False,
         sort_keys=True,
     )
 
-    if before_history != after_history:
-        history_changed = True
-
-    if history_changed or first_run:
+    if first_run or original != updated:
         save_history(history)
     else:
-        print("履歴に変更はありません")
+        print("履歴の変更はありません")
 
     print()
     print("=== Instagram全員分チェック終了 ===")
 
     if not all_success:
-        print("一部メンバーの処理に失敗しました")
+        print("一部のメンバーで失敗しました")
         sys.exit(1)
 
 
