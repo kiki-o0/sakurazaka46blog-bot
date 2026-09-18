@@ -188,4 +188,60 @@ def main():
     print("画像枚数:", len(image_urls))
     print("投稿本文:", body if body else "(本文なし)")
 
-    text_pay
+    text_payload = {
+        "username": "GitHub Actions Instagramテスト",
+        "embeds": [
+            {
+                "title": title[:256],
+                "url": post_url,
+                "description": make_description(
+                    published,
+                    post_url,
+                    body,
+                ),
+                "color": 15893389,
+            }
+        ],
+    }
+
+    print("本文メッセージを送信します")
+
+    if not send_webhook(text_payload):
+        raise SystemExit(1)
+
+    total = len(image_urls)
+
+    for index, image_url in enumerate(image_urls, start=1):
+        image_payload = {
+            "username": "GitHub Actions Instagramテスト",
+            "content": (
+                "画像 "
+                + str(index)
+                + "/"
+                + str(total)
+            ),
+            "embeds": [
+                {
+                    "url": post_url,
+                    "image": {
+                        "url": image_url,
+                    },
+                    "color": 15893389,
+                }
+            ],
+        }
+
+        print(
+            "画像メッセージを送信します:",
+            str(index) + "/" + str(total),
+        )
+
+        if not send_webhook(image_payload):
+            raise SystemExit(1)
+
+    print("Discord通知に成功しました")
+    print("=== GitHub Actions Instagram RSSテスト終了 ===")
+
+
+if __name__ == "__main__":
+    main()
