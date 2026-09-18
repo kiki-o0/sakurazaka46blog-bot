@@ -115,11 +115,14 @@ def main():
     published = get_text(entry, "published")
     post_url = get_post_url(entry)
     image_urls = get_images(entry)
+    japan_time = format_time(published)
 
     print("タイトル:", title)
-    print("投稿日時:", format_time(published))
+    print("投稿日時:", japan_time)
     print("投稿URL:", post_url)
     print("画像枚数:", len(image_urls))
+
+    description = "投稿日時: " + japan_time + " / " + post_url
 
     text_payload = {
         "username": "GitHub Actions Instagramテスト",
@@ -127,25 +130,19 @@ def main():
             {
                 "title": title[:256],
                 "url": post_url,
-                "description": (
-                    "投稿日時: "
-                    + format_time(published)
-                    + "
-"
-                    + post_url
-                ),
+                "description": description,
                 "color": 15893389,
             }
         ],
     }
 
     print("本文メッセージを送信します")
+
     if not send_webhook(text_payload):
         raise SystemExit(1)
 
     for start in range(0, len(image_urls), 10):
         image_group = image_urls[start:start + 10]
-
         image_embeds = []
 
         for image_url in image_group:
@@ -159,25 +156,19 @@ def main():
                 }
             )
 
+        range_text = (
+            str(start + 1)
+            + "〜"
+            + str(start + len(image_group))
+        )
+
         image_payload = {
             "username": "GitHub Actions Instagramテスト",
-            "content": (
-                "画像 "
-                + str(start + 1)
-                + "〜"
-                + str(start + len(image_group))
-                + " / "
-                + post_url
-            ),
+            "content": "画像 " + range_text + " / " + post_url,
             "embeds": image_embeds,
         }
 
-        print(
-            "画像メッセージを送信します:",
-            start + 1,
-            "〜",
-            start + len(image_group),
-        )
+        print("画像メッセージを送信します:", range_text)
 
         if not send_webhook(image_payload):
             raise SystemExit(1)
