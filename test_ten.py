@@ -48,9 +48,28 @@ def remove_html(value):
 
     value = html.unescape(value)
     value = re.sub(r"<[^>]*>", " ", value)
+    return value
+
+
+def clean_body(value, post_url):
+    if not value:
+        return ""
+
+    value = remove_html(value)
+
+    if post_url:
+        value = value.replace(post_url, " ")
+
+    value = re.sub(r"https?://S+", " ", value)
+
     value = re.sub(r"s+", " ", value)
 
-    return value.strip()
+    value = value.strip()
+
+    if len(value) > 2000:
+        return ""
+
+    return value
 
 
 def get_post_url(entry):
@@ -125,9 +144,7 @@ def send_webhook(payload):
 
 def make_main_description(published, post_url, body):
     result = "投稿日時: " + published
-
-    if post_url:
-        result = result + " / リンク: " + post_url
+    result = result + " / リンク: " + post_url
 
     if body:
         result = result + " / " + body
@@ -185,14 +202,7 @@ def main():
     raw_content = get_raw_text(entry, "content")
 
     body_source = raw_summary or raw_content
-    body = remove_html(body_source)
-
-    if body and post_url in body:
-        body = body.replace(post_url, "").strip()
-
-    if body and len(body) > 2000:
-        print("投稿本文に画像HTMLが含まれているため除外します")
-        body = ""
+    body = clean_body(body_source, post_url)
 
     print("タイトル:", title)
     print("投稿日時:", published)
