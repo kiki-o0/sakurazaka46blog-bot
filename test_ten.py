@@ -1,5 +1,6 @@
 import html
 import os
+import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
@@ -29,6 +30,27 @@ def get_text(parent, name):
 
     text = "".join(node.itertext())
     return html.unescape(text).strip()
+
+
+def get_raw_text(parent, name):
+    node_name = "{" + ATOM_NS + "}" + name
+    node = parent.find(node_name)
+
+    if node is None:
+        return ""
+
+    return "".join(node.itertext())
+
+
+def remove_html(value):
+    if not value:
+        return ""
+
+    value = html.unescape(value)
+    value = re.sub(r"<[^>]*>", " ", value)
+    value = re.sub(r"s+", " ", value)
+
+    return value.strip()
 
 
 def get_post_url(entry):
@@ -101,16 +123,16 @@ def send_webhook(payload):
     return False
 
 
-def make_description(published, post_url, body):
-    parts = [
-        "投稿日時: " + published,
-        "リンク: " + post_url,
-    ]
+def make_main_description(published, post_url, body):
+    result = "投稿日時: " + published
+
+    if post_url:
+        result = result + " / リンク: " + post_url
 
     if body:
-        parts.append(body)
+        result = result + " / " + body
 
-    return " / ".join(parts)[:4096]
+    return result[:4096]
 
 
 def main():
@@ -159,9 +181,18 @@ def main():
     post_url = get_post_url(entry)
     image_urls = get_images(entry)
 
-    summary = get_text(entry, "summary")
-    content = get_text(entry, "content")
-    body = summary or content
+    raw_summary = get_raw_text(entry, "summary")
+    raw_content = get_raw_text(entry, "content")
+
+    body_source = raw_summary or raw_content
+    body = remove_html(body_source)
+
+    if body and post_url in body:
+        body = body.replace(post_url, "").strip()
+
+    if body and len(body) > 2000:
+        print("投稿本文に画像HTMLが含まれているため除外します")
+        body = ""
 
     print("タイトル:", title)
     print("投稿日時:", published)
@@ -175,7 +206,7 @@ def main():
             {
                 "title": title[:256],
                 "url": post_url,
-                "description": make_description(
+                "description": make_main_description(
                     published,
                     post_url,
                     body,
