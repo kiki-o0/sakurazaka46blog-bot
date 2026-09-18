@@ -20,41 +20,21 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_TEST_TEN", "").strip()
 ATOM_NS = "http://www.w3.org/2005/Atom"
 
 
-def clean_text(value):
-    if not value:
-        return ""
-
-    value = html.unescape(value)
-    value = value.replace("<br>", " ")
-    value = value.replace("<br/>", " ")
-    value = value.replace("<br />", " ")
-    value = value.replace("
-", " ")
-    value = value.replace("
-", " ")
-
-    while "  " in value:
-        value = value.replace("  ", " ")
-
-    return value.strip()
-
-
 def get_text(parent, name):
-    node = parent.find("{"
-                       + ATOM_NS
-                       + "}"
-                       + name)
+    node_name = "{" + ATOM_NS + "}" + name
+    node = parent.find(node_name)
 
     if node is None:
         return ""
 
-    return clean_text("".join(node.itertext()))
+    text = "".join(node.itertext())
+    return html.unescape(text).strip()
 
 
 def get_post_url(entry):
-    link_tag = "{" + ATOM_NS + "}link"
+    link_name = "{" + ATOM_NS + "}link"
 
-    for node in entry.findall(link_tag):
+    for node in entry.findall(link_name):
         href = node.attrib.get("href", "")
         rel = node.attrib.get("rel", "")
         link_type = node.attrib.get("type", "")
@@ -70,9 +50,9 @@ def get_post_url(entry):
 
 def get_images(entry):
     images = []
-    link_tag = "{" + ATOM_NS + "}link"
+    link_name = "{" + ATOM_NS + "}link"
 
-    for node in entry.findall(link_tag):
+    for node in entry.findall(link_name):
         rel = node.attrib.get("rel", "")
         link_type = node.attrib.get("type", "")
         href = node.attrib.get("href", "")
@@ -93,6 +73,7 @@ def format_time(value):
         converted = datetime.fromisoformat(
             value.replace("Z", "+00:00")
         )
+
         return converted.astimezone().strftime(
             "%Y年%m月%d日 %H:%M"
         )
@@ -121,15 +102,15 @@ def send_webhook(payload):
 
 
 def make_description(published, post_url, body):
-    result = "投稿日時: " + published
-
-    if post_url:
-        result = result + " / リンク: " + post_url
+    parts = [
+        "投稿日時: " + published,
+        "リンク: " + post_url,
+    ]
 
     if body:
-        result = result + " / " + body
+        parts.append(body)
 
-    return result[:4096]
+    return " / ".join(parts)[:4096]
 
 
 def main():
@@ -161,8 +142,8 @@ def main():
         print("Atom XML解析エラー:", error)
         raise SystemExit(1)
 
-    entry_tag = "{" + ATOM_NS + "}entry"
-    entries = root.findall(entry_tag)
+    entry_name = "{" + ATOM_NS + "}entry"
+    entries = root.findall(entry_name)
 
     print("取得した投稿数:", len(entries))
 
