@@ -1,35 +1,26 @@
-name: Instagram Monitor
+name: Discord Test
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'
   workflow_dispatch:
 
-concurrency:
-  group: instagram-monitor
-  cancel-in-progress: false
-
 jobs:
-  check:
+  test-discord:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout
+      - name: リポジトリを取得
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Pythonを準備
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install curl_cffi requests
+      - name: requestsをインストール
+        run: python -m pip install requests
 
-      - name: Run Instagram monitor
+      - name: Discordテストを実行
         env:
-          INSTA_COOKIE: ${{ secrets.INSTA_COOKIE }}
           WEBHOOK_TEN: ${{ secrets.WEBHOOK_TEN }}
           WEBHOOK_AIRI: ${{ secrets.WEBHOOK_AIRI }}
           WEBHOOK_RINA_I: ${{ secrets.WEBHOOK_RINA_I }}
@@ -50,10 +41,4 @@ jobs:
           WEBHOOK_MIU: ${{ secrets.WEBHOOK_MIU }}
           WEBHOOK_MINAMI: ${{ secrets.WEBHOOK_MINAMI }}
           WEBHOOK_YUUKA: ${{ secrets.WEBHOOK_YUUKA }}
-        run: python insta_check.py
-
-      - name: Save history
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Update Instagram history [skip ci]"
-          file_pattern: "insta_history.json"
+        run: python -u insta_check.py
