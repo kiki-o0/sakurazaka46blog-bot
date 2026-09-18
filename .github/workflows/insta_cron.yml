@@ -1,82 +1,95 @@
-MEMBERS = [
-    {
-        "username": "yamasaki.ten",
-        "webhook_env": "WEBHOOK_TEN",
-    },
-    {
-        "username": "airi.taniguchi.official",
-        "webhook_env": "WEBHOOK_AIRI",
-    },
-    {
-        "username": "rina_ino_",
-        "webhook_env": "WEBHOOK_RINA_I",
-    },
-    {
-        "username": "endohikari_official",
-        "webhook_env": "WEBHOOK_HIKARI",
-    },
-    {
-        "username": "ozonoreis2",
-        "webhook_env": "WEBHOOK_REI",
-    },
-    {
-        "username": "akiho_onuma_official",
-        "webhook_env": "WEBHOOK_AKIHO",
-    },
-    {
-        "username": "seki_yumiko_official",
-        "webhook_env": "WEBHOOK_YUMIKO",
-    },
-    {
-        "username": "takemotoyui_official",
-        "webhook_env": "WEBHOOK_YUI",
-    },
-    {
-        "username": "tamura.hono.official",
-        "webhook_env": "WEBHOOK_HONO",
-    },
-    {
-        "username": "fujiyoshi.karin",
-        "webhook_env": "WEBHOOK_KARIN",
-    },
-    {
-        "username": "matsudarina_official",
-        "webhook_env": "WEBHOOK_RINA_M",
-    },
-    {
-        "username": "rena_moriya_official",
-        "webhook_env": "WEBHOOK_RENA",
-    },
-    {
-        "username": "rika.ishimori.official",
-        "webhook_env": "WEBHOOK_RIKA",
-    },
-    {
-        "username": "riko.endo_official",
-        "webhook_env": "WEBHOOK_RIKO",
-    },
-    {
-        "username": "reinaodakura_official",
-        "webhook_env": "WEBHOOK_REINA_O",
-    },
-    {
-        "username": "yuzuki_nakashima_official",
-        "webhook_env": "WEBHOOK_YUZUKI",
-    },
-    {
-        "username": "yu.murai_official",
-        "webhook_env": "WEBHOOK_YU",
-    },
-    {
-        "username": "miumurayama_official",
-        "webhook_env": "WEBHOOK_MIU",
-    },
-    {
-        "username": "miichan_official",
-        "webhook_env": "WEBHOOK_MATONO",
-    },
-    {
-        "username": "yuuka_sugai_official",
-        "webhook_env": "WEBHOOK_YUUKA",
-    },
-]
+name: Instagram Checker All
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instagram-checker-all
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check all Instagram accounts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install requests curl_cffi
+
+      - name: Run Instagram checker
+        env:
+          INSTA_COOKIE: ${{ secrets.INSTA_COOKIE }}
+
+          WEBHOOK_AIRI: ${{ secrets.WEBHOOK_AIRI }}
+          WEBHOOK_AKIHO: ${{ secrets.WEBHOOK_AKIHO }}
+          WEBHOOK_HIKARI: ${{ secrets.WEBHOOK_HIKARI }}
+          WEBHOOK_HONO: ${{ secrets.WEBHOOK_HONO }}
+          WEBHOOK_ISHIMORI: ${{ secrets.WEBHOOK_ISHIMORI }}
+          WEBHOOK_KARIN: ${{ secrets.WEBHOOK_KARIN }}
+          WEBHOOK_MIU: ${{ secrets.WEBHOOK_MIU }}
+          WEBHOOK_MINAMI: ${{ secrets.WEBHOOK_MINAMI }}
+          WEBHOOK_MORIYA: ${{ secrets.WEBHOOK_MORIYA }}
+          WEBHOOK_ODAKURA: ${{ secrets.WEBHOOK_ODAKURA }}
+          WEBHOOK_REI: ${{ secrets.WEBHOOK_REI }}
+          WEBHOOK_REINA_O: ${{ secrets.WEBHOOK_REINA_O }}
+          WEBHOOK_RENA: ${{ secrets.WEBHOOK_RENA }}
+          WEBHOOK_RIKA: ${{ secrets.WEBHOOK_RIKA }}
+          WEBHOOK_RIKO: ${{ secrets.WEBHOOK_RIKO }}
+          WEBHOOK_RINA_I: ${{ secrets.WEBHOOK_RINA_I }}
+          WEBHOOK_RINA_M: ${{ secrets.WEBHOOK_RINA_M }}
+          WEBHOOK_TEN: ${{ secrets.WEBHOOK_TEN }}
+          WEBHOOK_YUI: ${{ secrets.WEBHOOK_YUI }}
+          WEBHOOK_YUMIKO: ${{ secrets.WEBHOOK_YUMIKO }}
+          WEBHOOK_YU: ${{ secrets.WEBHOOK_YU }}
+          WEBHOOK_YUUKA: ${{ secrets.WEBHOOK_YUUKA }}
+          WEBHOOK_YUZUKI: ${{ secrets.WEBHOOK_YUZUKI }}
+
+        run: python insta_checker.py
+
+      - name: Check history file
+        id: history
+        run: |
+          if [ -f insta_history.json ]; then
+            echo "insta_history.json exists"
+          else
+            echo "insta_history.json was not created"
+            exit 1
+          fi
+
+          if git diff --quiet -- insta_history.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "履歴に変更はありません"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "履歴に変更があります"
+          fi
+
+      - name: Commit and push history
+        if: steps.history.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add insta_history.json
+          git commit -m "Update Instagram history [skip ci]"
+          git push
