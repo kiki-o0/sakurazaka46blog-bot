@@ -63,7 +63,7 @@ jobs:
           WEBHOOK_YUUKA: ${{ secrets.WEBHOOK_YUUKA }}
           WEBHOOK_YUZUKI: ${{ secrets.WEBHOOK_YUZUKI }}
 
-        run: python insta_checker.py
+        run: python insta_check.py
 
       - name: Verify history file
         id: history
