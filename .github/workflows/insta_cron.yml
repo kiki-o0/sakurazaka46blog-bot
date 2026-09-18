@@ -26,10 +26,9 @@ jobs:
           persist-credentials: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.x"
-          cache: "pip"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
@@ -66,13 +65,11 @@ jobs:
 
         run: python insta_checker.py
 
-      - name: Check history file
+      - name: Verify history file
         id: history
         run: |
-          if [ -f insta_history.json ]; then
-            echo "insta_history.json exists"
-          else
-            echo "insta_history.json was not created"
+          if [ ! -f insta_history.json ]; then
+            echo "insta_history.jsonが作成されていません"
             exit 1
           fi
 
