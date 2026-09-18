@@ -1,10 +1,10 @@
-name: Discord Test
+name: Instagram取得テスト
 
 on:
   workflow_dispatch:
 
 jobs:
-  test-discord:
+  test-instagram:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,29 +16,12 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: requestsをインストール
-        run: python -m pip install requests
+      - name: 必要なライブラリをインストール
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install curl_cffi
 
-      - name: Discordテストを実行
+      - name: Instagram取得テスト
         env:
-          WEBHOOK_TEN: ${{ secrets.WEBHOOK_TEN }}
-          WEBHOOK_AIRI: ${{ secrets.WEBHOOK_AIRI }}
-          WEBHOOK_RINA_I: ${{ secrets.WEBHOOK_RINA_I }}
-          WEBHOOK_HIKARI: ${{ secrets.WEBHOOK_HIKARI }}
-          WEBHOOK_REI: ${{ secrets.WEBHOOK_REI }}
-          WEBHOOK_AKIHO: ${{ secrets.WEBHOOK_AKIHO }}
-          WEBHOOK_YUMIKO: ${{ secrets.WEBHOOK_YUMIKO }}
-          WEBHOOK_YUI: ${{ secrets.WEBHOOK_YUI }}
-          WEBHOOK_HONO: ${{ secrets.WEBHOOK_HONO }}
-          WEBHOOK_KARIN: ${{ secrets.WEBHOOK_KARIN }}
-          WEBHOOK_RINA_M: ${{ secrets.WEBHOOK_RINA_M }}
-          WEBHOOK_RENA: ${{ secrets.WEBHOOK_RENA }}
-          WEBHOOK_RIKA: ${{ secrets.WEBHOOK_RIKA }}
-          WEBHOOK_RIKO: ${{ secrets.WEBHOOK_RIKO }}
-          WEBHOOK_REINA_O: ${{ secrets.WEBHOOK_REINA_O }}
-          WEBHOOK_YUZUKI: ${{ secrets.WEBHOOK_YUZUKI }}
-          WEBHOOK_YU: ${{ secrets.WEBHOOK_YU }}
-          WEBHOOK_MIU: ${{ secrets.WEBHOOK_MIU }}
-          WEBHOOK_MINAMI: ${{ secrets.WEBHOOK_MINAMI }}
-          WEBHOOK_YUUKA: ${{ secrets.WEBHOOK_YUUKA }}
+          INSTA_COOKIE: ${{ secrets.INSTA_COOKIE }}
         run: python -u insta_check.py
