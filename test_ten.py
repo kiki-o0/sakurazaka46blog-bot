@@ -1,6 +1,6 @@
 import html
-import xml.etree.ElementTree as ET
 import os
+import xml.etree.ElementTree as ET
 from datetime import datetime
 
 import requests
@@ -50,7 +50,7 @@ def get_images(entry):
             if href not in images:
                 images.append(href)
 
-    return images[:9]
+    return images
 
 
 def format_time(value):
@@ -61,6 +61,26 @@ def format_time(value):
         return value
 
 
+def send_webhook(payload):
+    try:
+        response = requests.post(
+            WEBHOOK_URL,
+            json=payload,
+            timeout=30,
+        )
+    except requests.RequestException as error:
+        print("Discord通信エラー:", error)
+        return False
+
+    print("Discord HTTPステータス:", response.status_code)
+
+    if response.status_code == 204:
+        return True
+
+    print(response.text[:500])
+    return False
+
+
 def main():
     print("=== GitHub Actions Instagram RSSテスト開始 ===")
 
@@ -68,15 +88,11 @@ def main():
         print("WEBHOOK_TEST_TENが設定されていません")
         raise SystemExit(1)
 
-    try:
-        response = requests.get(
-            FEED_URL,
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=30,
-        )
-    except requests.RequestException as error:
-        print("RSS-Bridge通信エラー:", error)
-        raise SystemExit(1)
+    response = requests.get(
+        FEED_URL,
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=30,
+    )
 
     print("RSS-Bridge HTTPステータス:", response.status_code)
 
@@ -84,13 +100,9 @@ def main():
         print(response.text[:500])
         raise SystemExit(1)
 
-    try:
-        root = ET.fromstring(response.content)
-    except ET.ParseError as error:
-        print("Atom解析エラー:", error)
-        raise SystemExit(1)
-
+    root = ET.fromstring(response.content)
     entries = root.findall("atom:entry", NS)
+
     print("取得した投稿数:", len(entries))
 
     if not entries:
@@ -109,48 +121,66 @@ def main():
     print("投稿URL:", post_url)
     print("画像枚数:", len(image_urls))
 
-    description = "投稿日時 " + format_time(published)
-
-    embeds = [
-        {
-            "title": title[:256],
-            "url": post_url,
-            "description": description,
-            "color": 15893389,
-        }
-    ]
-
-    for image_url in image_urls:
-        embeds.append(
+    text_payload = {
+        "username": "GitHub Actions Instagramテスト",
+        "embeds": [
             {
+                "title": title[:256],
                 "url": post_url,
-                "image": {
-                    "url": image_url,
-                },
+                "description": (
+                    "投稿日時: "
+                    + format_time(published)
+                    + "
+"
+                    + post_url
+                ),
                 "color": 15893389,
             }
-        )
-
-    payload = {
-        "username": "GitHub Actions Instagramテスト",
-        "embeds": embeds,
+        ],
     }
 
-    try:
-        discord_response = requests.post(
-            WEBHOOK_URL,
-            json=payload,
-            timeout=30,
+    print("本文メッセージを送信します")
+    if not send_webhook(text_payload):
+        raise SystemExit(1)
+
+    for start in range(0, len(image_urls), 10):
+        image_group = image_urls[start:start + 10]
+
+        image_embeds = []
+
+        for image_url in image_group:
+            image_embeds.append(
+                {
+                    "url": post_url,
+                    "image": {
+                        "url": image_url,
+                    },
+                    "color": 15893389,
+                }
+            )
+
+        image_payload = {
+            "username": "GitHub Actions Instagramテスト",
+            "content": (
+                "画像 "
+                + str(start + 1)
+                + "〜"
+                + str(start + len(image_group))
+                + " / "
+                + post_url
+            ),
+            "embeds": image_embeds,
+        }
+
+        print(
+            "画像メッセージを送信します:",
+            start + 1,
+            "〜",
+            start + len(image_group),
         )
-    except requests.RequestException as error:
-        print("Discord通信エラー:", error)
-        raise SystemExit(1)
 
-    print("Discord HTTPステータス:", discord_response.status_code)
-
-    if discord_response.status_code != 204:
-        print(discord_response.text[:500])
-        raise SystemExit(1)
+        if not send_webhook(image_payload):
+            raise SystemExit(1)
 
     print("Discord通知に成功しました")
     print("=== GitHub Actions Instagram RSSテスト終了 ===")
