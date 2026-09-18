@@ -25,129 +25,62 @@ USER_AGENT = (
 
 
 MEMBERS = [
-    {
-        "username": "yamasaki.ten",
-        "webhook_env": "WEBHOOK_TEN",
-    },
-    {
-        "username": "airi.taniguchi.official",
-        "webhook_env": "WEBHOOK_AIRI",
-    },
-    {
-        "username": "rina_ino_",
-        "webhook_env": "WEBHOOK_RINA_I",
-    },
-    {
-        "username": "endohikari_official",
-        "webhook_env": "WEBHOOK_HIKARI",
-    },
-    {
-        "username": "ozonoreis2",
-        "webhook_env": "WEBHOOK_REI",
-    },
-    {
-        "username": "akiho_onuma_official",
-        "webhook_env": "WEBHOOK_AKIHO",
-    },
-    {
-        "username": "seki_yumiko_official",
-        "webhook_env": "WEBHOOK_YUMIKO",
-    },
-    {
-        "username": "takemotoyui_official",
-        "webhook_env": "WEBHOOK_YUI",
-    },
-    {
-        "username": "tamura.hono.official",
-        "webhook_env": "WEBHOOK_HONO",
-    },
-    {
-        "username": "fujiyoshi.karin",
-        "webhook_env": "WEBHOOK_KARIN",
-    },
-    {
-        "username": "matsudarina_official",
-        "webhook_env": "WEBHOOK_RINA_M",
-    },
-    {
-        "username": "rena_moriya_official",
-        "webhook_env": "WEBHOOK_RENA",
-    },
-    {
-        "username": "rika.ishimori.official",
-        "webhook_env": "WEBHOOK_RIKA",
-    },
-    {
-        "username": "riko.endo_official",
-        "webhook_env": "WEBHOOK_RIKO",
-    },
-    {
-        "username": "reinaodakura_official",
-        "webhook_env": "WEBHOOK_REINA_O",
-    },
-    {
-        "username": "yuzuki_nakashima_official",
-        "webhook_env": "WEBHOOK_YUZUKI",
-    },
-    {
-        "username": "yu.murai_official",
-        "webhook_env": "WEBHOOK_YU",
-    },
-    {
-        "username": "miumurayama_official",
-        "webhook_env": "WEBHOOK_MIU",
-    },
-    {
-        "username": "miichan_official",
-        "webhook_env": "WEBHOOK_MINAMI",
-    },
-    {
-        "username": "yuuka_sugai_official",
-        "webhook_env": "WEBHOOK_YUUKA",
-    },
+    ("yamasaki.ten", "WEBHOOK_TEN"),
+    ("airi.taniguchi.official", "WEBHOOK_AIRI"),
+    ("rina_ino_", "WEBHOOK_RINA_I"),
+    ("endohikari_official", "WEBHOOK_HIKARI"),
+    ("ozonoreis2", "WEBHOOK_REI"),
+    ("akiho_onuma_official", "WEBHOOK_AKIHO"),
+    ("seki_yumiko_official", "WEBHOOK_YUMIKO"),
+    ("takemotoyui_official", "WEBHOOK_YUI"),
+    ("tamura.hono.official", "WEBHOOK_HONO"),
+    ("fujiyoshi.karin", "WEBHOOK_KARIN"),
+    ("matsudarina_official", "WEBHOOK_RINA_M"),
+    ("rena_moriya_official", "WEBHOOK_RENA"),
+    ("rika.ishimori.official", "WEBHOOK_RIKA"),
+    ("riko.endo_official", "WEBHOOK_RIKO"),
+    ("reinaodakura_official", "WEBHOOK_REINA_O"),
+    ("yuzuki_nakashima_official", "WEBHOOK_YUZUKI"),
+    ("yu.murai_official", "WEBHOOK_YU"),
+    ("miumurayama_official", "WEBHOOK_MIU"),
+    ("miichan_official", "WEBHOOK_MINAMI"),
+    ("yuuka_sugai_official", "WEBHOOK_YUUKA"),
 ]
 
 
-def make_empty_history():
-    return {
-        member["username"]: []
-        for member in MEMBERS
-    }
+def empty_history():
+    result = {}
+
+    for username, webhook_env in MEMBERS:
+        result[username] = []
+
+    return result
 
 
 def load_history():
-    empty = make_empty_history()
-
     if not os.path.exists(HISTORY_FILE):
         print("履歴ファイルがありません")
-        print("初回実行として処理します")
-        return empty, True
+        return empty_history(), True
 
     try:
-        with open(
-            HISTORY_FILE,
-            "r",
-            encoding="utf-8",
-        ) as file:
+        with open(HISTORY_FILE, "r", encoding="utf-8") as file:
             old_history = json.load(file)
     except Exception as error:
         print("履歴ファイルの読み込みに失敗:", error)
-        print("空の履歴として処理します")
-        return empty, True
+        return empty_history(), True
 
     history = {}
     needs_migration = False
 
-    for member in MEMBERS:
-        username = member["username"]
+    for username, webhook_env in MEMBERS:
         value = old_history.get(username, [])
 
         if isinstance(value, list):
-            history[username] = [
-                str(item)
-                for item in value
-                if item
-            ]
+            history[username] = []
+
+            for item in value:
+                if item:
+                    history[username].append(str(item))
         else:
             history[username] = []
             needs_migration = True
@@ -159,11 +92,7 @@ def load_history():
 
 
 def save_history(history):
-    with open(
-        HISTORY_FILE,
-        "w",
-        encoding="utf-8",
-    ) as file:
+    with open(HISTORY_FILE, "w", encoding="utf-8") as file:
         json.dump(
             history,
             file,
@@ -187,14 +116,14 @@ def format_cookie(value):
 
 
 def get_headers():
-    raw_cookie = os.environ.get("INSTA_COOKIE", "")
-    cookie = format_cookie(raw_cookie)
-
     headers = {
         "X-IG-App-ID": INSTAGRAM_APP_ID,
         "User-Agent": USER_AGENT,
         "Accept": "*/*",
     }
+
+    raw_cookie = os.environ.get("INSTA_COOKIE", "")
+    cookie = format_cookie(raw_cookie)
 
     if cookie:
         headers["Cookie"] = cookie
@@ -229,7 +158,7 @@ def fetch_user(username):
     try:
         data = response.json()
     except ValueError:
-        print("JSONの解析に失敗しました")
+        print("InstagramのレスポンスがJSONではありません")
         return None
 
     user = data.get("data", {}).get("user", {})
@@ -242,11 +171,12 @@ def fetch_user(username):
 
 
 def get_caption(node):
-    edges = (
-        node
-        .get("edge_media_to_caption", {})
-        .get("edges", [])
+    caption_data = node.get(
+        "edge_media_to_caption",
+        {},
     )
+
+    edges = caption_data.get("edges", [])
 
     if not edges:
         return ""
@@ -272,8 +202,8 @@ def get_image_url(node):
     if display_url:
         return display_url
 
-    image_versions = node.get("image_versions2", {})
-    candidates = image_versions.get("candidates", [])
+    versions = node.get("image_versions2", {})
+    candidates = versions.get("candidates", [])
 
     if candidates:
         return candidates[0].get("url", "")
@@ -310,10 +240,7 @@ def get_images(node):
 def make_post(node):
     shortcode = node.get("shortcode", "")
     media_id = node.get("id", "")
-    timestamp = node.get(
-        "taken_at_timestamp",
-        0,
-    )
+    timestamp = node.get("taken_at_timestamp", 0)
 
     post_id = shortcode or str(media_id)
 
@@ -354,12 +281,12 @@ def make_post(node):
 
 
 def get_recent_posts(user):
-    edges = (
-        user
-        .get("edge_owner_to_timeline_media", {})
-        .get("edges", [])
+    timeline = user.get(
+        "edge_owner_to_timeline_media",
+        {},
     )
 
+    edges = timeline.get("edges", [])
     posts = []
 
     for edge in edges[:MAX_POSTS_TO_CHECK]:
@@ -370,7 +297,7 @@ def get_recent_posts(user):
             posts.append(post)
 
     posts.sort(
-        key=lambda post: post["timestamp"]
+        key=lambda item: item["timestamp"]
     )
 
     return posts
@@ -397,22 +324,11 @@ def send_webhook(webhook_url, payload):
 
 
 def send_post(username, webhook_url, post):
-    description = (
-        "投稿日時: "
-        + post["date"]
-        + "
-リンク: "
-        + post["url"]
-    )
+    description = "投稿日時: " + post["date"]
+    description = description + " / リンク: " + post["url"]
 
     if post["caption"]:
-        description = (
-            description
-            + "
-
-"
-            + post["caption"]
-        )
+        description = description + " / " + post["caption"]
 
     first_payload = {
         "username": "Instagram通知",
@@ -426,7 +342,7 @@ def send_post(username, webhook_url, post):
         ],
     }
 
-    print("本文メッセージを送信:", username)
+    print("本文を送信:", username)
 
     if not send_webhook(
         webhook_url,
@@ -463,7 +379,7 @@ def send_post(username, webhook_url, post):
         }
 
         print(
-            "画像送信:",
+            "画像を送信:",
             username,
             str(number) + "/" + str(total),
         )
@@ -480,17 +396,11 @@ def send_post(username, webhook_url, post):
 
 
 def process_member(
-    member,
+    username,
+    webhook_env,
     history,
     first_run,
 ):
-    username = member["username"]
-    webhook_env = member["webhook_env"]
-    webhook_url = os.environ.get(
-        webhook_env,
-        "",
-    ).strip()
-
     print()
     print("========================================")
     print("確認対象:", "@" + username)
@@ -510,31 +420,30 @@ def process_member(
 
     print("取得投稿数:", len(posts))
 
-    known_ids = set(
-        history.get(username, [])
-    )
+    known_ids = set(history.get(username, []))
 
     if first_run:
-        print("初回のため通知せず履歴だけ作成")
+        print("初回のため通知せず履歴だけ作成します")
 
         for post in posts:
             if post["id"] not in known_ids:
-                history.setdefault(
-                    username,
-                    [],
-                ).append(post["id"])
+                history.setdefault(username, []).append(
+                    post["id"]
+                )
 
         return True
 
-    new_posts = [
-        post
-        for post in posts
-        if post["id"] not in known_ids
-    ]
+    new_posts = []
+
+    for post in posts:
+        if post["id"] not in known_ids:
+            new_posts.append(post)
 
     if not new_posts:
-        print("新着なし:", username)
+        print("新着投稿なし:", username)
         return True
+
+    webhook_url = os.environ.get(webhook_env, "").strip()
 
     if not webhook_url:
         print("Webhook未設定:", webhook_env)
@@ -554,10 +463,9 @@ def process_member(
             print("送信失敗。履歴には追加しません")
             return False
 
-        history.setdefault(
-            username,
-            [],
-        ).append(post["id"])
+        history.setdefault(username, []).append(
+            post["id"]
+        )
 
     return True
 
@@ -565,10 +473,7 @@ def process_member(
 def main():
     print("=== Instagram全員分チェック開始 ===")
 
-    if not os.environ.get(
-        "INSTA_COOKIE",
-        "",
-    ).strip():
+    if not os.environ.get("INSTA_COOKIE", "").strip():
         print("警告: INSTA_COOKIEが未設定です")
 
     history, needs_migration = load_history()
@@ -576,10 +481,10 @@ def main():
     first_run = needs_migration
 
     if first_run:
-        print("初回または履歴形式変更です")
-        print("今回は通知せず、履歴だけ作成します")
+        print("初回または履歴形式変更を検出しました")
+        print("今回の通知は行わず、履歴だけ作成します")
     else:
-        print("既存履歴と比較して新着を通知します")
+        print("履歴と比較して新着投稿を通知します")
 
     original = json.dumps(
         history,
@@ -589,9 +494,10 @@ def main():
 
     all_success = True
 
-    for member in MEMBERS:
+    for username, webhook_env in MEMBERS:
         success = process_member(
-            member,
+            username,
+            webhook_env,
             history,
             first_run,
         )
@@ -616,7 +522,7 @@ def main():
     print("=== Instagram全員分チェック終了 ===")
 
     if not all_success:
-        print("一部のメンバーで失敗しました")
+        print("一部メンバーの処理に失敗しました")
         sys.exit(1)
 
 
