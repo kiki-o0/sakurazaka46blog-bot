@@ -1,152 +1,134 @@
+import json
 import os
 import sys
-import requests
+from curl_cffi import requests as ig_requests
 
 
-WEBHOOKS = [
-    {
-        "name": "山﨑天",
-        "env_name": "WEBHOOK_TEN",
-    },
-    {
-        "name": "谷口愛季",
-        "env_name": "WEBHOOK_AIRI",
-    },
-    {
-        "name": "井上梨名",
-        "env_name": "WEBHOOK_RINA_I",
-    },
-    {
-        "name": "遠藤光莉",
-        "env_name": "WEBHOOK_HIKARI",
-    },
-    {
-        "name": "大園玲",
-        "env_name": "WEBHOOK_REI",
-    },
-    {
-        "name": "大沼晶保",
-        "env_name": "WEBHOOK_AKIHO",
-    },
-    {
-        "name": "関有美子",
-        "env_name": "WEBHOOK_YUMIKO",
-    },
-    {
-        "name": "武元唯衣",
-        "env_name": "WEBHOOK_YUI",
-    },
-    {
-        "name": "田村保乃",
-        "env_name": "WEBHOOK_HONO",
-    },
-    {
-        "name": "藤吉夏鈴",
-        "env_name": "WEBHOOK_KARIN",
-    },
-    {
-        "name": "松田里奈",
-        "env_name": "WEBHOOK_RINA_M",
-    },
-    {
-        "name": "守屋麗奈",
-        "env_name": "WEBHOOK_RENA",
-    },
-    {
-        "name": "石森璃花",
-        "env_name": "WEBHOOK_RIKA",
-    },
-    {
-        "name": "遠藤理子",
-        "env_name": "WEBHOOK_RIKO",
-    },
-    {
-        "name": "小田倉麗奈",
-        "env_name": "WEBHOOK_REINA_O",
-    },
-    {
-        "name": "中嶋優月",
-        "env_name": "WEBHOOK_YUZUKI",
-    },
-    {
-        "name": "村井優",
-        "env_name": "WEBHOOK_YU",
-    },
-    {
-        "name": "村山美羽",
-        "env_name": "WEBHOOK_MIU",
-    },
-    {
-        "name": "小池美波",
-        "env_name": "WEBHOOK_MINAMI",
-    },
-    {
-        "name": "菅井友香",
-        "env_name": "WEBHOOK_YUUKA",
-    },
-]
+INSTAGRAM_ID = "yamasaki.ten"
+INSTAGRAM_APP_ID = "936619743392459"
 
 
-def send_test_message(webhook_url, member_name):
-    payload = {
-        "username": "櫻坂46 Instagram Monitor",
-        "content": f"テスト通知です。{member_name}用Webhookは正常に動作しています。",
-    }
+def format_cookie(raw_cookie):
+    raw_cookie = raw_cookie.strip()
 
-    try:
-        response = requests.post(
-            webhook_url,
-            json=payload,
-            timeout=15,
-        )
-    except requests.RequestException as error:
-        print(f"❌ {member_name}: 通信エラー")
-        print(f"   {error}")
-        return False
+    if not raw_cookie:
+        return ""
 
-    if response.status_code == 204:
-        print(f"✅ {member_name}: Discord通知に成功しました")
-        return True
+    if "=" in raw_cookie:
+        return raw_cookie
 
-    print(f"❌ {member_name}: Discord通知に失敗しました")
-    print(f"   HTTPステータス: {response.status_code}")
-    print(f"   Discordの返答: {response.text[:500]}")
-    return False
+    return f"sessionid={raw_cookie}"
 
 
 def main():
-    print("=== Discordテスト開始 ===")
+    print("=== Instagram取得テスト開始 ===")
+    print(f"確認対象: @{INSTAGRAM_ID}")
 
-    success_count = 0
-    failure_count = 0
-    missing_count = 0
+    raw_cookie = os.environ.get("INSTA_COOKIE", "")
 
-    for webhook in WEBHOOKS:
-        member_name = webhook["name"]
-        env_name = webhook["env_name"]
-        webhook_url = os.environ.get(env_name, "").strip()
-
-        if not webhook_url:
-            print(f"⚠️ {member_name}: {env_name} が設定されていません")
-            missing_count += 1
-            continue
-
-        print(f"🔍 {member_name} のWebhookを確認中...")
-        success = send_test_message(webhook_url, member_name)
-
-        if success:
-            success_count += 1
-        else:
-            failure_count += 1
-
-    print()
-    print("=== Discordテスト終了 ===")
-    print(f"成功: {success_count}")
-    print(f"失敗: {failure_count}")
-    print(f"未設定: {missing_count}")
-
-    if failure_count > 0:
+    if not raw_cookie:
+        print("❌ INSTA_COOKIEが設定されていません")
+        print("GitHub Secretsの名前がINSTA_COOKIEになっているか確認してください")
         sys.exit(1)
+
+    cookie = format_cookie(raw_cookie)
+
+    headers = {
+        "X-IG-App-ID": INSTAGRAM_APP_ID,
+        "Cookie": cookie,
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "*/*",
+    }
+
+    url = (
+        "https://www.instagram.com/api/v1/users/"
+        f"web_profile_info/?username={INSTAGRAM_ID}"
+    )
+
+    print("Instagramへ接続しています...")
+
+    try:
+        response = ig_requests.get(
+            url,
+            headers=headers,
+            impersonate="chrome",
+            timeout=20,
+        )
+    except Exception as error:
+        print("❌ Instagramへの接続でエラーが発生しました")
+        print(f"エラー内容: {error}")
+        sys.exit(1)
+
+    print(f"HTTPステータス: {response.status_code}")
+    print(f"Content-Type: {response.headers.get('content-type', '')}")
+    print(f"レスポンスサイズ: {len(response.content)} bytes")
+
+    retry_after = response.headers.get("retry-after")
+    if retry_after:
+        print(f"Retry-After: {retry_after}")
+
+    if response.status_code != 200:
+        print("❌ Instagramから正常なHTTP 200が返りませんでした")
+        print("レスポンス先頭200文字:")
+        print(response.text[:200])
+        sys.exit(1)
+
+    try:
+        data = response.json()
+    except ValueError:
+        print("❌ レスポンスがJSONではありません")
+        print("レスポンス先頭200文字:")
+        print(response.text[:200])
+        sys.exit(1)
+
+    user_data = data.get("data", {}).get("user", {})
+
+    if not user_data:
+        print("❌ JSON内にユーザー情報がありません")
+        print("JSONの最上位キー:")
+        print(list(data.keys()))
+        sys.exit(1)
+
+    media_edges = (
+        user_data
+        .get("edge_owner_to_timeline_media", {})
+        .get("edges", [])
+    )
+
+    if not media_edges:
+        print("⚠️ ユーザー情報は取得できましたが、投稿情報がありません")
+        sys.exit(0)
+
+    print(f"✅ 投稿情報を取得できました: {len(media_edges)}件")
+    print()
+    print("=== 取得した投稿 ===")
+
+    for number, edge in enumerate(media_edges[:5], start=1):
+        node = edge.get("node", {})
+        shortcode = node.get("shortcode", "")
+        taken_at = node.get("taken_at_timestamp", 0)
+        post_url = f"https://www.instagram.com/p/{shortcode}/"
+
+        caption = ""
+        caption_edges = (
+            node
+            .get("edge_media_to_caption", {})
+            .get("edges", [])
+        )
+
+        if caption_edges:
+            caption = caption_edges[0].get("node", {}).get("text", "")
+
+        print(f"{number}. {post_url}")
+        print(f"   投稿日時: {taken_at}")
+        print(f"   キャプション: {caption[:100]}")
+        print()
+
+    print("=== Instagram取得テスト終了 ===")
 
 
 if __name__ == "__main__":
