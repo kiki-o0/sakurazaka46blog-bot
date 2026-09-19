@@ -4,23 +4,26 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
+import xml.etree.ElementTree as ET
+from datetime import datetime
 
-from curl_cffi import requests as ig_requests
+
 import requests
 
 
-INSTAGRAM_APP_ID = "936619743392459"
 HISTORY_FILE = "insta_history.json"
+WAIT_SECONDS = 5
+DISCORD_WAIT_SECONDS = 1
+ATOM_NS = "http://www.w3.org/2005/Atom"
 
-MAX_POSTS_TO_CHECK = 5
-REQUEST_INTERVAL_SECONDS = 3
-DISCORD_INTERVAL_SECONDS = 1
-
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
+RSS_URL = (
+    "https://rss-bridge.org/bridge01/"
+    "?action=display"
+    "&bridge=InstagramBridge"
+    "&context=Username"
+    "&u={username}"
+    "&media_type=all"
+    "&format=Atom"
 )
 
 
@@ -48,32 +51,34 @@ MEMBERS = [
 ]
 
 
-def empty_history():
+def make_empty_history():
     result = {}
 
-    for username, webhook_env in MEMBERS:
+    for username, webhook_name in MEMBERS:
         result[username] = []
 
     return result
 
 
 def load_history():
+    empty = make_empty_history()
+
     if not os.path.exists(HISTORY_FILE):
-        print("履歴ファイルがありません")
-        return empty_history(), True
+        print("履歴ファイルなし")
+        return empty, True
 
     try:
         with open(HISTORY_FILE, "r", encoding="utf-8") as file:
-            old_history = json.load(file)
+            old_data = json.load(file)
     except Exception as error:
-        print("履歴ファイルの読み込みに失敗:", error)
-        return empty_history(), True
+        print("履歴読み込みエラー:", error)
+        return empty, True
 
     history = {}
-    needs_migration = False
+    migration = False
 
-    for username, webhook_env in MEMBERS:
-        value = old_history.get(username, [])
+    for username, webhook_name in MEMBERS:
+        value = old_data.get(username, [])
 
         if isinstance(value, list):
             history[username] = []
@@ -83,12 +88,12 @@ def load_history():
                     history[username].append(str(item))
         else:
             history[username] = []
-            needs_migration = True
+            migration = True
 
-    if set(old_history.keys()) != set(history.keys()):
-        needs_migration = True
+    if set(old_data.keys()) != set(history.keys()):
+        migration = True
 
-    return history, needs_migration
+    return history, migration
 
 
 def save_history(history):
@@ -103,89 +108,53 @@ def save_history(history):
     print("履歴を保存しました")
 
 
-def format_cookie(value):
-    value = value.strip()
+def text_from_entry(entry, name):
+    tag = "{" + ATOM_NS + "}" + name
+    node = entry.find(tag)
 
-    if not value:
+    if node is None:
         return ""
 
-    if "=" in value:
-        return value
-
-    return "sessionid=" + value
+    return "".join(node.itertext()).strip()
 
 
-def get_headers():
-    headers = {
-        "X-IG-App-ID": INSTAGRAM_APP_ID,
-        "User-Agent": USER_AGENT,
-        "Accept": "*/*",
-    }
+def entry_url(entry):
+    link_tag = "{" + ATOM_NS + "}link"
 
-    raw_cookie = os.environ.get("INSTA_COOKIE", "")
-    cookie = format_cookie(raw_cookie)
+    for node in entry.findall(link_tag):
+        href = node.attrib.get("href", "")
+        rel = node.attrib.get("rel", "")
 
-    if cookie:
-        headers["Cookie"] = cookie
+        if href and rel == "alternate":
+            return href
 
-    return headers
+    for node in entry.findall(link_tag):
+        href = node.attrib.get("href", "")
 
+        if href:
+            return href
 
-def fetch_user(username):
-    url = (
-        "https://www.instagram.com/api/v1/users/"
-        "web_profile_info/"
-    )
-
-    try:
-        response = ig_requests.get(
-            url,
-            params={"username": username},
-            headers=get_headers(),
-            impersonate="chrome",
-            timeout=30,
-        )
-    except Exception as error:
-        print("Instagram接続エラー:", error)
-        return None
-
-    print("HTTPステータス:", response.status_code)
-
-    if response.status_code != 200:
-        print(response.text[:300])
-        return None
-
-    try:
-        data = response.json()
-    except ValueError:
-        print("InstagramのレスポンスがJSONではありません")
-        return None
-
-    user = data.get("data", {}).get("user", {})
-
-    if not user:
-        print("ユーザー情報がありません")
-        return None
-
-    return user
+    return ""
 
 
-def get_caption(node):
-    caption_data = node.get(
-        "edge_media_to_caption",
-        {},
-    )
+def entry_images(entry):
+    images = []
+    link_tag = "{" + ATOM_NS + "}link"
 
-    edges = caption_data.get("edges", [])
+    for node in entry.findall(link_tag):
+        href = node.attrib.get("href", "")
+        rel = node.attrib.get("rel", "")
+        link_type = node.attrib.get("type", "")
 
-    if not edges:
-        return ""
+        if rel == "enclosure":
+            if href and link_type.startswith("image/"):
+                if href not in images:
+                    images.append(href)
 
-    caption_node = edges[0].get("node", {})
-    return caption_node.get("text", "")
+    return images
 
 
-def clean_caption(value):
+def clean_text(value):
     if not value:
         return ""
 
@@ -196,335 +165,50 @@ def clean_caption(value):
     return value.strip()
 
 
-def get_image_url(node):
-    display_url = node.get("display_url", "")
-
-    if display_url:
-        return display_url
-
-    versions = node.get("image_versions2", {})
-    candidates = versions.get("candidates", [])
-
-    if candidates:
-        return candidates[0].get("url", "")
-
-    return ""
-
-
-def get_images(node):
-    images = []
-
-    sidecar = node.get(
-        "edge_sidecar_to_children",
-        {},
-    )
-
-    edges = sidecar.get("edges", [])
-
-    for edge in edges:
-        child = edge.get("node", {})
-        image_url = get_image_url(child)
-
-        if image_url and image_url not in images:
-            images.append(image_url)
-
-    if not images:
-        image_url = get_image_url(node)
-
-        if image_url:
-            images.append(image_url)
-
-    return images
-
-
-def make_post(node):
-    shortcode = node.get("shortcode", "")
-    media_id = node.get("id", "")
-    timestamp = node.get("taken_at_timestamp", 0)
-
-    post_id = shortcode or str(media_id)
-
-    if shortcode:
-        post_url = (
-            "https://www.instagram.com/p/"
-            + shortcode
-            + "/"
-        )
-    else:
-        post_url = ""
+def format_date(value):
+    if not value:
+        return ""
 
     try:
-        timestamp = int(timestamp)
-    except (TypeError, ValueError):
-        timestamp = 0
+        converted = datetime.fromisoformat(
+            value.replace("Z", "+00:00")
+        )
 
-    if timestamp:
-        post_date = datetime.fromtimestamp(
-            timestamp,
-            tz=timezone.utc,
-        ).astimezone().strftime(
+        return converted.astimezone().strftime(
             "%Y年%m月%d日 %H:%M"
         )
-    else:
-        post_date = "日時不明"
-
-    return {
-        "id": post_id,
-        "url": post_url,
-        "date": post_date,
-        "timestamp": timestamp,
-        "caption": clean_caption(
-            get_caption(node)
-        ),
-        "images": get_images(node),
-    }
+    except Exception:
+        return value
 
 
-def get_recent_posts(user):
-    timeline = user.get(
-        "edge_owner_to_timeline_media",
-        {},
-    )
+def read_feed(username):
+    url = RSS_URL.format(username=username)
 
-    edges = timeline.get("edges", [])
-    posts = []
+    print("RSS取得:", username)
 
-    for edge in edges[:MAX_POSTS_TO_CHECK]:
-        node = edge.get("node", {})
-        post = make_post(node)
-
-        if post["id"]:
-            posts.append(post)
-
-    posts.sort(
-        key=lambda item: item["timestamp"]
-    )
-
-    return posts
-
-
-def send_webhook(webhook_url, payload):
     try:
-        response = requests.post(
-            webhook_url,
-            json=payload,
-            timeout=30,
+        response = requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=40,
         )
     except requests.RequestException as error:
-        print("Discord接続エラー:", error)
-        return False
+        print("RSS接続エラー:", error)
+        return None
 
-    print("Discord HTTPステータス:", response.status_code)
+    print("RSS HTTPステータス:", response.status_code)
 
-    if response.status_code in (200, 204):
-        return True
+    if response.status_code != 200:
+        print(response.text[:300])
+        return None
 
-    print("Discordエラー:", response.text[:500])
-    return False
-
-
-def send_post(username, webhook_url, post):
-    description = "投稿日時: " + post["date"]
-    description = description + " / リンク: " + post["url"]
-
-    if post["caption"]:
-        description = description + " / " + post["caption"]
-
-    first_payload = {
-        "username": "Instagram通知",
-        "embeds": [
-            {
-                "title": username,
-                "url": post["url"],
-                "description": description[:4096],
-                "color": 15893389,
-            }
-        ],
-    }
-
-    print("本文を送信:", username)
-
-    if not send_webhook(
-        webhook_url,
-        first_payload,
-    ):
-        return False
-
-    time.sleep(DISCORD_INTERVAL_SECONDS)
-
-    total = len(post["images"])
-
-    for number, image_url in enumerate(
-        post["images"],
-        start=1,
-    ):
-        image_payload = {
-            "username": "Instagram通知",
-            "content": (
-                username
-                + " 画像 "
-                + str(number)
-                + "/"
-                + str(total)
-            ),
-            "embeds": [
-                {
-                    "url": post["url"],
-                    "image": {
-                        "url": image_url,
-                    },
-                    "color": 15893389,
-                }
-            ],
-        }
-
-        print(
-            "画像を送信:",
-            username,
-            str(number) + "/" + str(total),
-        )
-
-        if not send_webhook(
-            webhook_url,
-            image_payload,
-        ):
-            return False
-
-        time.sleep(DISCORD_INTERVAL_SECONDS)
-
-    return True
+    try:
+        return ET.fromstring(response.content)
+    except ET.ParseError as error:
+        print("XML解析エラー:", error)
+        return None
 
 
-def process_member(
-    username,
-    webhook_env,
-    history,
-    first_run,
-):
-    print()
-    print("========================================")
-    print("確認対象:", "@" + username)
-    print("Webhook:", webhook_env)
-
-    user = fetch_user(username)
-
-    if user is None:
-        print("取得失敗:", username)
-        return False
-
-    posts = get_recent_posts(user)
-
-    if not posts:
-        print("投稿なし:", username)
-        return True
-
-    print("取得投稿数:", len(posts))
-
-    known_ids = set(history.get(username, []))
-
-    if first_run:
-        print("初回のため通知せず履歴だけ作成します")
-
-        for post in posts:
-            if post["id"] not in known_ids:
-                history.setdefault(username, []).append(
-                    post["id"]
-                )
-
-        return True
-
-    new_posts = []
-
-    for post in posts:
-        if post["id"] not in known_ids:
-            new_posts.append(post)
-
-    if not new_posts:
-        print("新着投稿なし:", username)
-        return True
-
-    webhook_url = os.environ.get(webhook_env, "").strip()
-
-    if not webhook_url:
-        print("Webhook未設定:", webhook_env)
-        return False
-
-    for post in new_posts:
-        print("新着投稿:", post["url"])
-        print("画像枚数:", len(post["images"]))
-
-        success = send_post(
-            username,
-            webhook_url,
-            post,
-        )
-
-        if not success:
-            print("送信失敗。履歴には追加しません")
-            return False
-
-        history.setdefault(username, []).append(
-            post["id"]
-        )
-
-    return True
-
-
-def main():
-    print("=== Instagram全員分チェック開始 ===")
-
-    if not os.environ.get("INSTA_COOKIE", "").strip():
-        print("警告: INSTA_COOKIEが未設定です")
-
-    history, needs_migration = load_history()
-
-    first_run = needs_migration
-
-    if first_run:
-        print("初回または履歴形式変更を検出しました")
-        print("今回の通知は行わず、履歴だけ作成します")
-    else:
-        print("履歴と比較して新着投稿を通知します")
-
-    original = json.dumps(
-        history,
-        ensure_ascii=False,
-        sort_keys=True,
-    )
-
-    all_success = True
-
-    for username, webhook_env in MEMBERS:
-        success = process_member(
-            username,
-            webhook_env,
-            history,
-            first_run,
-        )
-
-        if not success:
-            all_success = False
-
-        time.sleep(REQUEST_INTERVAL_SECONDS)
-
-    updated = json.dumps(
-        history,
-        ensure_ascii=False,
-        sort_keys=True,
-    )
-
-    if first_run or original != updated:
-        save_history(history)
-    else:
-        print("履歴の変更はありません")
-
-    print()
-    print("=== Instagram全員分チェック終了 ===")
-
-    if not all_success:
-        print("一部メンバーの処理に失敗しました")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+def get_posts(root):
+    entry_tag = "{" + ATOM_NS + "}entry"
+    entries =
