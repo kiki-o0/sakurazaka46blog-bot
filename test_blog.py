@@ -1,7 +1,8 @@
+import os
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-from datetime import datetime
+from datetime import datetime, timezone
 from xml.sax.saxutils import escape
 
 ARTICLE_URL = (
@@ -34,6 +35,7 @@ for img in article_body.find_all("img"):
         img.get("src")
         or img.get("data-src")
         or img.get("data-original")
+        or img.get("data-lazy-src")
         or ""
     )
 
@@ -46,13 +48,16 @@ for img in article_body.find_all("img"):
     img["src"] = image_url
     img["alt"] = img.get("alt") or "小島凪紗 公式ブログ画像"
 
-    link = article_body.new_tag("a", href=image_url)
-    img.wrap(link)
+    parent_link = img.find_parent("a")
+
+    if not parent_link or parent_link.get("href") != image_url:
+        link = article_body.new_tag("a", href=image_url)
+        img.wrap(link)
 
 content_html = article_body.decode_contents()
 
 title = soup.title.get_text(" ", strip=True)
-updated = datetime.now().astimezone().isoformat()
+updated = datetime.now(timezone.utc).isoformat()
 
 feed_xml = f'''<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -76,8 +81,12 @@ feed_xml = f'''<?xml version="1.0" encoding="utf-8"?>
 </feed>
 '''
 
-with open("kojima-nagisa.xml", "w", encoding="utf-8") as f:
+os.makedirs("feeds", exist_ok=True)
+
+feed_path = "feeds/kojima-nagisa.xml"
+
+with open(feed_path, "w", encoding="utf-8") as f:
     f.write(feed_xml)
 
 print("Atomフィードを生成しました")
-print("ファイル: kojima-nagisa.xml")
+print(f"ファイル: {feed_path}")
