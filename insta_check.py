@@ -232,7 +232,7 @@ def get_posts(root):
     entries = root.findall(entry_tag)
     posts = []
 
-    for entry in entries:
+    for index, entry in enumerate(entries, start=1):
         title = text_from_entry(entry, "title")
         published = text_from_entry(entry, "published")
         updated = text_from_entry(entry, "updated")
@@ -254,6 +254,12 @@ def get_posts(root):
                 "images": entry_images(entry),
             }
         )
+
+        print(f"  [{index}] ID: {post_id or url}")
+        print(f"      タイトル: {title[:50]}")
+        print(f"      URL: {url}")
+        print(f"      日付: {format_date(date_value)}")
+        print(f"      画像枚数: {len(entry_images(entry))}")
 
     return posts
 
@@ -376,6 +382,8 @@ def process_member(
 
     known = set(history.get(username, []))
 
+    print("既知のID数:", len(known))
+
     if first_run:
         print("初回のため通知せず履歴だけ作成")
 
@@ -390,6 +398,7 @@ def process_member(
     for post in posts:
         if post["id"] not in known:
             new_posts.append(post)
+            print("  新着検出:", post["id"][:50])
 
     if not new_posts:
         print("新着なし:", username)
