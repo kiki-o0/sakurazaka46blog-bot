@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   check:
-    name: Check all Instagram accounts
+    name: Check all Instagram RSS feeds
     runs-on: ubuntu-latest
 
     steps:
@@ -33,22 +33,17 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install requests curl_cffi
+          python -m pip install requests
 
-      - name: Run Instagram checker
+      - name: Run RSS Instagram checker
         env:
-          INSTA_COOKIE: ${{ secrets.INSTA_COOKIE }}
-
           WEBHOOK_AIRI: ${{ secrets.WEBHOOK_AIRI }}
           WEBHOOK_AKIHO: ${{ secrets.WEBHOOK_AKIHO }}
           WEBHOOK_HIKARI: ${{ secrets.WEBHOOK_HIKARI }}
           WEBHOOK_HONO: ${{ secrets.WEBHOOK_HONO }}
-          WEBHOOK_ISHIMORI: ${{ secrets.WEBHOOK_ISHIMORI }}
           WEBHOOK_KARIN: ${{ secrets.WEBHOOK_KARIN }}
           WEBHOOK_MIU: ${{ secrets.WEBHOOK_MIU }}
           WEBHOOK_MINAMI: ${{ secrets.WEBHOOK_MINAMI }}
-          WEBHOOK_MORIYA: ${{ secrets.WEBHOOK_MORIYA }}
-          WEBHOOK_ODAKURA: ${{ secrets.WEBHOOK_ODAKURA }}
           WEBHOOK_REI: ${{ secrets.WEBHOOK_REI }}
           WEBHOOK_REINA_O: ${{ secrets.WEBHOOK_REINA_O }}
           WEBHOOK_RENA: ${{ secrets.WEBHOOK_RENA }}
