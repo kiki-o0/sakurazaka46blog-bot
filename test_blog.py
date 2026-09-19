@@ -38,7 +38,7 @@ for img in main.find_all("img"):
         continue
 
     url = urljoin(BASE_URL, src)
-    safe_url = escape(url, quote=True)
+    safe_url = escape(url)
 
     images.append(
         '<p><a href="' + safe_url + '">'
