@@ -18,7 +18,7 @@ article_body = soup.find(class_="box-article")
 
 if article_body:
     print("本文エリアを取得できました")
-    print(article_body.get_text("
+    print(article_body.get_text("\
 ", strip=True)[:500])
 else:
     print("本文エリアが見つかりません")
