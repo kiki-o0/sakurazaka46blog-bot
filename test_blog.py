@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 
 url = "https://sakurazaka46.com/s/s46/diary/detail/70909?ima=0000&cd=blog"
 
@@ -31,6 +32,8 @@ if article_body:
             or img.get("data-original")
             or ""
         )
-        print(f"画像{index}:", src)
+
+        image_url = urljoin("https://sakurazaka46.com", src)
+        print(f"画像{index}:", image_url)
 else:
     print("本文エリアが見つかりません")
