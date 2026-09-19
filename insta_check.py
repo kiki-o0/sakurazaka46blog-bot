@@ -201,6 +201,7 @@ def read_feed(username):
     )
 
     print("RSS取得:", username)
+    print("URL:", url)
 
     try:
         response = requests.get(
@@ -215,6 +216,9 @@ def read_feed(username):
         return None
 
     print("RSS HTTPステータス:", response.status_code)
+    print("RSSレスポンス（先頭1000文字）:")
+    print(response.text[:1000])
+    print("---")
 
     if response.status_code != 200:
         print(response.text[:300])
@@ -224,6 +228,8 @@ def read_feed(username):
         return ET.fromstring(response.content)
     except ET.ParseError as error:
         print("XML解析エラー:", error)
+        print("レスポンス内容:")
+        print(response.text[:500])
         return None
 
 
@@ -231,6 +237,8 @@ def get_posts(root):
     entry_tag = "{" + ATOM_NS + "}entry"
     entries = root.findall(entry_tag)
     posts = []
+
+    print("エントリー要素数:", len(entries))
 
     for index, entry in enumerate(entries, start=1):
         title = text_from_entry(entry, "title")
