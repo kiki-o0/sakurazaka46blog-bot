@@ -15,17 +15,13 @@ soup = BeautifulSoup(res.text, "html.parser")
 
 print(soup.title.get_text(strip=True))
 
-article_body = soup.find(class_="box-article")
+article_body = soup.find(class="box-article")
 
 if article_body:
-    print("本文エリアを取得できました")
-    print(article_body.get_text("\
-", strip=True)[:500])
+    for tag in article_body.find_all(["script", "style", "noscript"]):
+        tag.decompose()
 
-    images = article_body.find_all("img")
-    print("画像枚数:", len(images))
-
-    for index, img in enumerate(images, start=1):
+    for img in article_body.find_all("img"):
         src = (
             img.get("src")
             or img.get("data-src")
@@ -33,7 +29,21 @@ if article_body:
             or ""
         )
 
+        if not src:
+            img.decompose()
+            continue
+
         image_url = urljoin("https://sakurazaka46.com", src)
-        print(f"画像{index}:", image_url)
+
+        img["src"] = image_url
+        img["alt"] = img.get("alt") or "小島凪紗 公式ブログ画像"
+
+        link = article_body.new_tag("a", href=image_url)
+        img.wrap(link)
+
+    content_html = article_body.decode_contents()
+
+    print("本文HTMLを作成できました")
+    print(content_html[:1000])
 else:
     print("本文エリアが見つかりません")
