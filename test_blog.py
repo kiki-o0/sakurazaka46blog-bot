@@ -63,8 +63,7 @@ for child in main.contents:
         if text:
             texts.append("<p>" + escape(text) + "</p>")
 
-content = "
-".join(texts + images)
+content = chr(10).join(texts + images)
 updated = datetime.now(timezone.utc).isoformat()
 
 xml = """<?xml version="1.0" encoding="utf-8"?>
