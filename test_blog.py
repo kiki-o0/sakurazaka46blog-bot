@@ -15,7 +15,7 @@ soup = BeautifulSoup(res.text, "html.parser")
 
 print(soup.title.get_text(strip=True))
 
-article_body = soup.find(class="box-article")
+article_body = soup.find(class_="box-article")
 
 if article_body:
     for tag in article_body.find_all(["script", "style", "noscript"]):
