@@ -196,12 +196,9 @@ def format_date(value):
 
 
 def read_feed(username):
-    url = RSS_URL.format(
-        username=username,
-    )
+    url = RSS_URL.format(username=username)
 
     print("RSS取得:", username)
-    print("URL:", url)
 
     try:
         response = requests.get(
@@ -216,9 +213,6 @@ def read_feed(username):
         return None
 
     print("RSS HTTPステータス:", response.status_code)
-    print("RSSレスポンス（先頭1000文字）:")
-    print(response.text[:1000])
-    print("---")
 
     if response.status_code != 200:
         print(response.text[:300])
@@ -228,8 +222,6 @@ def read_feed(username):
         return ET.fromstring(response.content)
     except ET.ParseError as error:
         print("XML解析エラー:", error)
-        print("レスポンス内容:")
-        print(response.text[:500])
         return None
 
 
@@ -237,8 +229,6 @@ def get_posts(root):
     entry_tag = "{" + ATOM_NS + "}entry"
     entries = root.findall(entry_tag)
     posts = []
-
-    print("エントリー要素数:", len(entries))
 
     for index, entry in enumerate(entries, start=1):
         title = text_from_entry(entry, "title")
@@ -262,12 +252,6 @@ def get_posts(root):
                 "images": entry_images(entry),
             }
         )
-
-        print(f"  [{index}] ID: {post_id or url}")
-        print(f"      タイトル: {title[:50]}")
-        print(f"      URL: {url}")
-        print(f"      日付: {format_date(date_value)}")
-        print(f"      画像枚数: {len(entry_images(entry))}")
 
     return posts
 
