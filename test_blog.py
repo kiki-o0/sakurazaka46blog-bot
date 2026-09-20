@@ -1,13 +1,14 @@
 import os
+import re
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 from xml.sax.saxutils import escape
 
 import requests
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup
 
 
-ARTICLE_URL = "https://sakurazaka46.com/s/s46/diary/detail/70909?ima=0000&cd=blog"
+ARTICLE_URL = "https://sakurazaka46.com/s/s46/diary/detail/70769?ima=0000&cd=blog"
 BASE_URL = "https://sakurazaka46.com"
 FEED_URL = "https://kiki-o0.github.io/sakurazaka46blog-bot/kojima-nagisa.xml"
 
@@ -24,44 +25,38 @@ article = soup.find(class_="box-article")
 if article is None:
     raise RuntimeError("本文エリアが見つかりません")
 
-main = article.find("p")
+image_count = 0
 
-if main is None:
-    raise RuntimeError("本文が見つかりません")
+for img in article.find_all("img"):
+    src = img.get("src")
+    if not src:
+        img.decompose()
+        continue
+
+    url = urljoin(BASE_URL, src)
+    safe_url = escape(url)
+    
+    img_html = f'<p><a href="{safe_url}"><img src="{safe_url}" alt="公式ブログ画像"></a></p>'
+    img.replace_with(f"__IMG_START__{img_html}__IMG_END__")
+    image_count += 1
 
 elements = []
-image_count = 0
-current_text = ""
+raw_text = article.get_text(separator="\n", strip=True)
 
-for node in main.descendants:
-    if isinstance(node, NavigableString):
-        current_text += str(node)
-    elif isinstance(node, Tag):
-        if node.name in ["br", "div", "p"]:
-            text = " ".join(current_text.split())
-            if text:
-                elements.append("<p>" + escape(text) + "</p>")
-            current_text = ""
-        elif node.name == "img":
-            text = " ".join(current_text.split())
-            if text:
-                elements.append("<p>" + escape(text) + "</p>")
-            current_text = ""
+parts = re.split(r'__IMG_START__(.*?)__IMG_END__', raw_text)
 
-            src = node.get("src")
-            if src:
-                url = urljoin(BASE_URL, src)
-                safe_url = escape(url)
-                elements.append(
-                    '<p><a href="' + safe_url + '">'
-                    '<img src="' + safe_url + '" alt="公式ブログ画像">'
-                    "</a></p>"
-                )
-                image_count += 1
-
-text = " ".join(current_text.split())
-if text:
-    elements.append("<p>" + escape(text) + "</p>")
+for i, part in enumerate(parts):
+    part = part.strip()
+    if not part:
+        continue
+    
+    if i % 2 == 1:
+        elements.append(part)
+    else:
+        for line in part.split("\n"):
+            line = line.strip()
+            if line:
+                elements.append("<p>" + escape(line) + "</p>")
 
 content = chr(10).join(elements)
 updated = datetime.now(timezone.utc).isoformat()
