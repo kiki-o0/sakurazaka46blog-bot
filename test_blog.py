@@ -41,27 +41,14 @@ def parse_article(url):
     if not article:
         return ""
         
-    # --- 不要なプロモーション要素（櫻坂46メッセージ等）の削除 ---
-    for block in article.find_all(["div", "p"]):
-        if not block.parent:
-            continue
-        text = block.get_text(strip=True)
-        # 記事末尾の定型テキストを含むブロックを除外
-        if "からのメッセージを受け取る" in text:
-            block.decompose()
-            
-    for a in article.find_all("a"):
-        if not a.parent:
-            continue
-        href = a.get("href", "")
-        # アプリ誘導バナーを含むリンクを除外
-        if "app_guide" in href:
-            a.decompose()
-    # --------------------------------------------------------
+    # 1. 既知のプロモーション用クラスを持つブロックを丸ごと削除
+    for guide in article.find_all(class_=lambda x: x and 'app_guide' in x):
+        guide.decompose()
         
+    # 2. 画像の処理 (バナー系画像URLも除外)
     for img in article.find_all("img"):
-        src = img.get("src")
-        if not src:
+        src = img.get("src", "")
+        if not src or "app_guide" in src:
             img.decompose()
             continue
             
@@ -84,6 +71,9 @@ def parse_article(url):
         else:
             for line in part.split("\n"):
                 line = line.strip()
+                # 3. 最終テキスト出力からバナー特有の文言を除外
+                if "からのメッセージを受け取る" in line or line == "櫻坂46メッセージ" or line == "「櫻坂46メッセージ」で":
+                    continue
                 if line:
                     elements.append("<p>" + escape(line) + "</p>")
                     
