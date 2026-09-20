@@ -1,5 +1,4 @@
 import os
-import re
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 from xml.sax.saxutils import escape
@@ -30,50 +29,39 @@ main = article.find("p")
 if main is None:
     raise RuntimeError("本文が見つかりません")
 
-image_count = 0
-
-# 画像をリストに分けてしまうのではなく、順序を保つためHTML内で文字列マーカーに置換します
-for img in main.find_all("img"):
-    src = img.get("src")
-
-    if not src:
-        img.decompose()
-        continue
-
-    url = urljoin(BASE_URL, src)
-    safe_url = escape(url)
-
-    # 後で順番通りに処理できるよう、固有の文字列に置き換える
-    img.replace_with(f"__IMG_START__{safe_url}__IMG_END__")
-    image_count += 1
-
 elements = []
+image_count = 0
+current_text = ""
 
-# main内の要素を順番に処理します
-for child in main.contents:
-    text_content = ""
-    
-    if isinstance(child, NavigableString):
-        text_content = str(child)
-    elif isinstance(child, Tag) and child.name != "br":
-        text_content = child.get_text(" ", strip=True)
-        
-    if not text_content:
-        continue
-
-    # マーカーを基準に、テキストと画像を「実際のページの順序そのまま」で分割して追加します
-    parts = re.split(r'__IMG_START__(.*?)__IMG_END__', text_content)
-    for i, part in enumerate(parts):
-        if i % 2 == 1:  # 奇数番目は画像URLのパート
-            elements.append(
-                '<p><a href="' + part + '">'
-                '<img src="' + part + '" alt="公式ブログ画像">'
-                "</a></p>"
-            )
-        else:  # 偶数番目は通常のテキストパート
-            text = " ".join(part.split())
+for node in main.descendants:
+    if isinstance(node, NavigableString):
+        current_text += str(node)
+    elif isinstance(node, Tag):
+        if node.name in ["br", "div", "p"]:
+            text = " ".join(current_text.split())
             if text:
                 elements.append("<p>" + escape(text) + "</p>")
+            current_text = ""
+        elif node.name == "img":
+            text = " ".join(current_text.split())
+            if text:
+                elements.append("<p>" + escape(text) + "</p>")
+            current_text = ""
+
+            src = node.get("src")
+            if src:
+                url = urljoin(BASE_URL, src)
+                safe_url = escape(url)
+                elements.append(
+                    '<p><a href="' + safe_url + '">'
+                    '<img src="' + safe_url + '" alt="公式ブログ画像">'
+                    "</a></p>"
+                )
+                image_count += 1
+
+text = " ".join(current_text.split())
+if text:
+    elements.append("<p>" + escape(text) + "</p>")
 
 content = chr(10).join(elements)
 updated = datetime.now(timezone.utc).isoformat()
