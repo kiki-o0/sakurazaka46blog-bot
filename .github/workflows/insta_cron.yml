@@ -2,7 +2,7 @@ name: Instagram Checker All
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron:
 
   workflow_dispatch:
 
