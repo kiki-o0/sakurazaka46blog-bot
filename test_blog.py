@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 
 
-ARTICLE_URL = "https://sakurazaka46.com/s/s46/diary/detail/70769?ima=0000&cd=blog"
+ARTICLE_URL = "https://sakurazaka46.com/s/s46/diary/detail/70909?ima=0000&cd=blog"
 BASE_URL = "https://sakurazaka46.com"
 FEED_URL = "https://kiki-o0.github.io/sakurazaka46blog-bot/kojima-nagisa.xml"
 
