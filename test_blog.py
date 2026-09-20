@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 from xml.sax.saxutils import escape
@@ -29,41 +30,52 @@ main = article.find("p")
 if main is None:
     raise RuntimeError("本文が見つかりません")
 
-images = []
+image_count = 0
 
+# 画像をリストに分けてしまうのではなく、順序を保つためHTML内で文字列マーカーに置換します
 for img in main.find_all("img"):
     src = img.get("src")
 
     if not src:
+        img.decompose()
         continue
 
     url = urljoin(BASE_URL, src)
     safe_url = escape(url)
 
-    images.append(
-        '<p><a href="' + safe_url + '">'
-        '<img src="' + safe_url + '" alt="公式ブログ画像">'
-        "</a></p>"
-    )
+    # 後で順番通りに処理できるよう、固有の文字列に置き換える
+    img.replace_with(f"__IMG_START__{safe_url}__IMG_END__")
+    image_count += 1
 
-    img.decompose()
+elements = []
 
-texts = []
-
+# main内の要素を順番に処理します
 for child in main.contents:
+    text_content = ""
+    
     if isinstance(child, NavigableString):
-        text = " ".join(str(child).split())
-
-        if text:
-            texts.append("<p>" + escape(text) + "</p>")
-
+        text_content = str(child)
     elif isinstance(child, Tag) and child.name != "br":
-        text = " ".join(child.get_text(" ", strip=True).split())
+        text_content = child.get_text(" ", strip=True)
+        
+    if not text_content:
+        continue
 
-        if text:
-            texts.append("<p>" + escape(text) + "</p>")
+    # マーカーを基準に、テキストと画像を「実際のページの順序そのまま」で分割して追加します
+    parts = re.split(r'__IMG_START__(.*?)__IMG_END__', text_content)
+    for i, part in enumerate(parts):
+        if i % 2 == 1:  # 奇数番目は画像URLのパート
+            elements.append(
+                '<p><a href="' + part + '">'
+                '<img src="' + part + '" alt="公式ブログ画像">'
+                "</a></p>"
+            )
+        else:  # 偶数番目は通常のテキストパート
+            text = " ".join(part.split())
+            if text:
+                elements.append("<p>" + escape(text) + "</p>")
 
-content = chr(10).join(texts + images)
+content = chr(10).join(elements)
 updated = datetime.now(timezone.utc).isoformat()
 
 xml = """<?xml version="1.0" encoding="utf-8"?>
@@ -98,4 +110,4 @@ with open("feeds/kojima-nagisa.xml", "w", encoding="utf-8") as file:
     file.write(xml)
 
 print("Atomフィードを生成しました")
-print("画像枚数:", len(images))
+print("画像枚数:", image_count)
