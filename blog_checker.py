@@ -1,176 +1,101 @@
 import os
-import json
+from datetime import datetime, timezone
+from urllib.parse import urljoin
+from xml.sax.saxutils import escape
+
 import requests
-from bs4 import BeautifulSoup
-import time
+from bs4 import BeautifulSoup, NavigableString, Tag
 
-# ！！！ここが真の背番号リストです！！！
-WEBHOOKS = {
-    # 2期生
-    "46": os.environ.get("WEBHOOK_TAMURA"),
-    "47": os.environ.get("WEBHOOK_FUJIYOSHI"),
-    "48": os.environ.get("WEBHOOK_MATSUDA"),
-    "50": os.environ.get("WEBHOOK_MORITA"),
-    "51": os.environ.get("WEBHOOK_YAMASAKI"), # 天ちゃん！
-    
-    # 新2期生
-    "53": os.environ.get("WEBHOOK_ENDO_H"), # ひかりん！
-    "54": os.environ.get("WEBHOOK_OZONO"),
-    "55": os.environ.get("WEBHOOK_ONUMA"),
-    "56": os.environ.get("WEBHOOK_KOUSAKA"),
-    "57": os.environ.get("WEBHOOK_MASUMOTO"),
-    "58": os.environ.get("WEBHOOK_MORIYA"),
-    
-    # 3期生
-    "59": os.environ.get("WEBHOOK_ISHIMORI"),
-    "60": os.environ.get("WEBHOOK_ENDO_R"),
-    "61": os.environ.get("WEBHOOK_ODAKURA"),
-    "62": os.environ.get("WEBHOOK_KOJIMA"), # 小島凪紗ちゃん！
-    "63": os.environ.get("WEBHOOK_TANIGUCHI"),
-    "64": os.environ.get("WEBHOOK_NAKAJIMA"),
-    "65": os.environ.get("WEBHOOK_MATONO"),
-    "66": os.environ.get("WEBHOOK_MUKAI"),
-    "67": os.environ.get("WEBHOOK_MURAI"),
-    "68": os.environ.get("WEBHOOK_MURAYAMA"),
-    "69": os.environ.get("WEBHOOK_YAMASHITA"), # 山下瞳月ちゃん！
-    
-    # 4期生
-    "70": os.environ.get("WEBHOOK_ASAI"),
-    "71": os.environ.get("WEBHOOK_INAGUMA"),
-    "72": os.environ.get("WEBHOOK_KATUMATA"),
-    "73": os.environ.get("WEBHOOK_SATO"),
-    "74": os.environ.get("WEBHOOK_NAKAGAWA"),
-    "75": os.environ.get("WEBHOOK_MATSUMOTO"),
-    "76": os.environ.get("WEBHOOK_MEGURO"),
-    "77": os.environ.get("WEBHOOK_YAMAKAWA"),
-    "78": os.environ.get("WEBHOOK_YAMADA"),
-}
 
-CACHE_FILE = "last_blogs.json"
+ARTICLE_URL = "https://sakurazaka46.com/s/s46/diary/detail/70769?ima=0000&cd=blog"
+BASE_URL = "https://sakurazaka46.com"
+FEED_URL = "https://kiki-o0.github.io/sakurazaka46blog-bot/kojima-nagisa.xml"
 
-def load_cache():
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
+response = requests.get(
+    ARTICLE_URL,
+    headers={"User-Agent": "Mozilla/5.0"},
+    timeout=15,
+)
+response.raise_for_status()
 
-def save_cache(cache):
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False, indent=2)
+soup = BeautifulSoup(response.text, "html.parser")
+article = soup.find(class_="box-article")
 
-def check_blog():
-    cache = load_cache()
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8"
-    }
+if article is None:
+    raise RuntimeError("本文エリアが見つかりません")
 
-    print("=== ブログ確認スタート ===")
-    for member_id, webhook_url in WEBHOOKS.items():
-        if not webhook_url:
-            continue
-            
-        url = f"https://sakurazaka46.com/s/s46/diary/blog/list?ct={member_id}"
-        
-        try:
-            res = requests.get(url, headers=headers, timeout=15)
-            res.encoding = res.apparent_encoding
-            
-            if res.status_code != 200:
-                print(f"[{member_id}] ⚠️ エラー: {res.status_code}")
-                continue
+main = article.find("p")
 
-            soup = BeautifulSoup(res.text, "html.parser")
-            
-            latest_post = soup.find("li", class_="box")
-            if not latest_post:
-                continue
-                
-            post_a = latest_post.find("a")
-            if not post_a:
-                continue
-            post_url = "https://sakurazaka46.com" + post_a["href"]
+if main is None:
+    raise RuntimeError("本文が見つかりません")
 
-            name_tag = latest_post.find(class_="name")
-            name = name_tag.text.strip() if name_tag else "メンバー"
+elements = []
+image_count = 0
+current_text = ""
 
-            if cache.get(member_id) == post_url:
-                print(f"[{member_id}] ➡️ 新しい記事はないみたいです")
-                continue
-            
-            print(f"[{member_id}] 🚪 新しい記事を発見！奥の部屋（個別記事）に入ります...")
-            time.sleep(1) 
+for node in main.descendants:
+    if isinstance(node, NavigableString):
+        current_text += str(node)
+    elif isinstance(node, Tag):
+        if node.name in ["br", "div", "p"]:
+            text = " ".join(current_text.split())
+            if text:
+                elements.append("<p>" + escape(text) + "</p>")
+            current_text = ""
+        elif node.name == "img":
+            text = " ".join(current_text.split())
+            if text:
+                elements.append("<p>" + escape(text) + "</p>")
+            current_text = ""
 
-            detail_res = requests.get(post_url, headers=headers, timeout=15)
-            detail_res.encoding = detail_res.apparent_encoding
-            detail_soup = BeautifulSoup(detail_res.text, "html.parser")
+            src = node.get("src")
+            if src:
+                url = urljoin(BASE_URL, src)
+                safe_url = escape(url)
+                elements.append(
+                    '<p><a href="' + safe_url + '">'
+                    '<img src="' + safe_url + '" alt="公式ブログ画像">'
+                    "</a></p>"
+                )
+                image_count += 1
 
-            title_tag = detail_soup.find("h1", class_="title")
-            title = title_tag.text.strip() if title_tag else "タイトルなし"
-            
-            image_urls = []
-            article_body = detail_soup.find(class_="box-article")
-            if article_body:
-                for img in article_body.find_all("img"):
-                    src = img.get("src", "")
-                    if "emoji" not in src and "icon" not in src:
-                        img_url = src
-                        if img_url.startswith("/"):
-                            img_url = "https://sakurazaka46.com" + img_url
-                        image_urls.append(img_url)
+text = " ".join(current_text.split())
+if text:
+    elements.append("<p>" + escape(text) + "</p>")
 
-            if member_id in cache:
-                print(f"[{member_id}] ✨ 新しいブログ発見！Discordに送ります！（画像{len(image_urls)}枚）")
-                send_discord_album(webhook_url, name, title, post_url, image_urls)
-            else:
-                print(f"[{member_id}] 📝 初回の記録としてメモ帳に書きました（通知はしません）")
-                
-            cache[member_id] = post_url
-                
-        except Exception as e:
-            print(f"[{member_id}] エラー: {e}")
-            
-    save_cache(cache)
-    print("=== 確認終了 ===")
+content = chr(10).join(elements)
+updated = datetime.now(timezone.utc).isoformat()
 
-def send_discord_album(webhook_url, name, title, post_url, image_urls):
-    if not image_urls:
-        payload = {
-            "username": "櫻坂blog通知",
-            "embeds": [{
-                "author": {"name": name},
-                "title": f"【ブログ更新】{title}",
-                "url": post_url,
-                "description": "このブログに画像はありませんでした。",
-                "color": 16738740
-            }]
-        }
-        requests.post(webhook_url, json=payload, timeout=10)
-        return
+xml = """<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>櫻坂46｜小島凪紗 公式ブログ</title>
+  <id>{feed_url}</id>
+  <updated>{updated}</updated>
+  <link href="{feed_url}" rel="self"/>
+  <entry>
+    <title>小島凪紗 公式ブログ</title>
+    <id>{article_url}</id>
+    <link href="{article_url}"/>
+    <updated>{updated}</updated>
+    <author>
+      <name>小島凪紗</name>
+    </author>
+    <content type="html"><![CDATA[
+{content}
+    ]]></content>
+  </entry>
+</feed>
+""".format(
+    feed_url=escape(FEED_URL),
+    updated=escape(updated),
+    article_url=escape(ARTICLE_URL),
+    content=content,
+)
 
-    for i in range(0, len(image_urls), 10):
-        chunk = image_urls[i:i+10]
-        embeds = []
-        
-        for j, img_url in enumerate(chunk):
-            if i == 0 and j == 0:
-                embeds.append({
-                    "author": {"name": name},
-                    "title": f"【ブログ更新】{title}",
-                    "url": post_url,
-                    "color": 16738740,
-                    "image": {"url": img_url}
-                })
-            else:
-                embeds.append({
-                    "color": 16738740,
-                    "image": {"url": img_url}
-                })
-                
-        requests.post(webhook_url, json={"username": "櫻坂通知ロボ", "embeds": embeds}, timeout=10)
+os.makedirs("feeds", exist_ok=True)
 
-if __name__ == "__main__":
-    check_blog()
+with open("feeds/kojima-nagisa.xml", "w", encoding="utf-8") as file:
+    file.write(xml)
+
+print("Atomフィードを生成しました")
+print("画像枚数:", image_count)
