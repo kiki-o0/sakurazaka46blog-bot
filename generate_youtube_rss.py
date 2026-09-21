@@ -1,33 +1,51 @@
 import requests
 import xml.etree.ElementTree as ET
 import urllib.parse
+import time
 
-def process_channel(url, output_file):
-    # GitHub ActionsのIP制限による404エラーを回避するため、プロキシAPIを経由する
-    encoded_url = urllib.parse.quote(url)
-    proxy_url = f"https://api.allorigins.win/raw?url={encoded_url}"
-    
+def fetch_xml(url):
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/xml, text/xml, */*; q=0.01'
     }
     
-    try:
-        response = requests.get(proxy_url, headers=headers, timeout=20)
-        
-        if response.status_code != 200:
-            print(f"Skipped: Status {response.status_code} - {url}")
-            return False
-            
-    except requests.exceptions.RequestException as e:
-        print(f"Request Error: {e}")
-        return False
+    encoded_url_all = urllib.parse.quote(url, safe='')
     
+    # 直接アクセスと、複数の異なるプロキシを順番に試行するリスト
+    urls_to_try = [
+        url,
+        f"https://api.codetabs.com/v1/proxy?quest={url}",
+        f"https://corsproxy.io/?{encoded_url_all}"
+    ]
+    
+    for try_url in urls_to_try:
+        try:
+            response = requests.get(try_url, headers=headers, timeout=20)
+            if response.status_code == 200:
+                # 正常にXMLが取得できた場合は内容を返す
+                return response.content
+            else:
+                print(f"  [Info] Failed to fetch with {try_url} (Status: {response.status_code})")
+        except requests.exceptions.RequestException as e:
+            print(f"  [Info] Request Error with {try_url}: {e}")
+        
+        # 次のアクセス先を試す前に少し待機
+        time.sleep(2)
+        
+    return None
+
+def process_channel(url, output_file):
+    content = fetch_xml(url)
+    if not content:
+        print(f"Skipped: All fetch attempts failed for {url}")
+        return False
+        
     ET.register_namespace('', 'http://www.w3.org/2005/Atom')
     ET.register_namespace('yt', 'http://www.youtube.com/xml/schemas/2015')
     ET.register_namespace('media', 'http://search.yahoo.com/mrss/')
     
     try:
-        root = ET.fromstring(response.content)
+        root = ET.fromstring(content)
     except ET.ParseError as e:
         print(f"XML Parse Error: {e}")
         return False
@@ -44,8 +62,8 @@ def process_channel(url, output_file):
             if thumbnail is not None:
                 thumbnail_url = thumbnail.get('url')
                 
-                content = ET.Element('{http://www.w3.org/2005/Atom}content')
-                content.set('type', 'html')
+                content_elem = ET.Element('{http://www.w3.org/2005/Atom}content')
+                content_elem.set('type', 'html')
                 
                 html_content = f'<img src="{thumbnail_url}" alt="thumbnail">'
                 
@@ -54,13 +72,13 @@ def process_channel(url, output_file):
                     escaped_desc = description.text.replace('\n', '<br>')
                     html_content += f'<br><br>{escaped_desc}'
                 
-                content.text = html_content
+                content_elem.text = html_content
                 
                 existing_content = entry.find('atom:content', ns)
                 if existing_content is not None:
                     entry.remove(existing_content)
                 
-                entry.append(content)
+                entry.append(content_elem)
     
     tree = ET.ElementTree(root)
     tree.write(output_file, encoding='utf-8', xml_declaration=True)
