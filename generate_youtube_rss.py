@@ -2,8 +2,11 @@ import requests
 import xml.etree.ElementTree as ET
 
 def process_channel(url, output_file):
-    # RSSの取得
-    response = requests.get(url)
+    # RSSの取得（YouTubeのボット対策による404エラーを回避するためUser-Agentを指定）
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    response = requests.get(url, headers=headers)
     response.raise_for_status()
     
     # XMLのパース
