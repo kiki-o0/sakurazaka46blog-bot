@@ -2,85 +2,87 @@ import requests
 import xml.etree.ElementTree as ET
 import urllib.parse
 import time
-
-def fetch_xml(url):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/xml, text/xml, */*; q=0.01'
-    }
-    
-    encoded_url_all = urllib.parse.quote(url, safe='')
-    
-    # 直接アクセスと、複数の異なるプロキシを順番に試行するリスト
-    urls_to_try = [
-        url,
-        f"https://api.codetabs.com/v1/proxy?quest={url}",
-        f"https://corsproxy.io/?{encoded_url_all}"
-    ]
-    
-    for try_url in urls_to_try:
-        try:
-            response = requests.get(try_url, headers=headers, timeout=20)
-            if response.status_code == 200:
-                # 正常にXMLが取得できた場合は内容を返す
-                return response.content
-            else:
-                print(f"  [Info] Failed to fetch with {try_url} (Status: {response.status_code})")
-        except requests.exceptions.RequestException as e:
-            print(f"  [Info] Request Error with {try_url}: {e}")
-        
-        # 次のアクセス先を試す前に少し待機
-        time.sleep(2)
-        
-    return None
+from datetime import datetime
 
 def process_channel(url, output_file):
-    content = fetch_xml(url)
-    if not content:
-        print(f"Skipped: All fetch attempts failed for {url}")
-        return False
-        
-    ET.register_namespace('', 'http://www.w3.org/2005/Atom')
-    ET.register_namespace('yt', 'http://www.youtube.com/xml/schemas/2015')
-    ET.register_namespace('media', 'http://search.yahoo.com/mrss/')
+    # rss2json API経由で取得し、YouTube側のBotブロック(404)を完全に回避する。
+    # さらに30分ごとの更新を反映させるため(API側の1時間キャッシュを無効化するため)、ダミーのタイムスタンプを付与。
+    bypassed_url = f"{url}&_t={int(time.time())}"
+    encoded_url = urllib.parse.quote(bypassed_url)
+    api_url = f"https://api.rss2json.com/v1/api.json?rss_url={encoded_url}"
     
     try:
-        root = ET.fromstring(content)
-    except ET.ParseError as e:
-        print(f"XML Parse Error: {e}")
+        response = requests.get(api_url, timeout=20)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("status") != "ok":
+            print(f"Skipped: rss2json API returned error for {url}")
+            return False
+            
+    except Exception as e:
+        print(f"Request Error for {url}: {e}")
         return False
+        
+    # Atom形式のXMLを新しく構築
+    ET.register_namespace('', 'http://www.w3.org/2005/Atom')
+    feed = ET.Element('{http://www.w3.org/2005/Atom}feed')
     
-    ns = {
-        'atom': 'http://www.w3.org/2005/Atom',
-        'media': 'http://search.yahoo.com/mrss/'
-    }
+    # フィードのタイトルとリンク
+    feed_title = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}title')
+    feed_title.text = data.get("feed", {}).get("title", "YouTube Channel")
     
-    for entry in root.findall('atom:entry', ns):
-        media_group = entry.find('media:group', ns)
-        if media_group is not None:
-            thumbnail = media_group.find('media:thumbnail', ns)
-            if thumbnail is not None:
-                thumbnail_url = thumbnail.get('url')
-                
-                content_elem = ET.Element('{http://www.w3.org/2005/Atom}content')
-                content_elem.set('type', 'html')
-                
-                html_content = f'<img src="{thumbnail_url}" alt="thumbnail">'
-                
-                description = media_group.find('media:description', ns)
-                if description is not None and description.text:
-                    escaped_desc = description.text.replace('\n', '<br>')
-                    html_content += f'<br><br>{escaped_desc}'
-                
-                content_elem.text = html_content
-                
-                existing_content = entry.find('atom:content', ns)
-                if existing_content is not None:
-                    entry.remove(existing_content)
-                
-                entry.append(content_elem)
+    feed_link = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}link')
+    feed_link.set('href', url)
     
-    tree = ET.ElementTree(root)
+    feed_updated = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}updated')
+    feed_updated.text = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # 各動画のデータを処理して追加
+    for item in data.get("items", []):
+        entry = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}entry')
+        
+        # タイトル
+        title = ET.SubElement(entry, '{http://www.w3.org/2005/Atom}title')
+        title.text = item.get("title", "")
+        
+        # リンク
+        link = ET.SubElement(entry, '{http://www.w3.org/2005/Atom}link')
+        link.set('href', item.get("link", ""))
+        
+        # ID
+        entry_id = ET.SubElement(entry, '{http://www.w3.org/2005/Atom}id')
+        entry_id.text = item.get("guid", item.get("link", ""))
+        
+        # 更新日時
+        pub_date_str = item.get("pubDate", "")
+        updated = ET.SubElement(entry, '{http://www.w3.org/2005/Atom}updated')
+        try:
+            # rss2json API は "YYYY-MM-DD HH:MM:SS" 形式で返すため、Atom向けに変換
+            dt = datetime.strptime(pub_date_str, "%Y-%m-%d %H:%M:%S")
+            updated.text = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            updated.text = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            
+        # 本文（サムネイル画像＋概要文）
+        content = ET.SubElement(entry, '{http://www.w3.org/2005/Atom}content')
+        content.set('type', 'html')
+        
+        thumbnail_url = item.get("thumbnail", "")
+        description = item.get("description", "")
+        
+        html_content = ""
+        if thumbnail_url:
+            # Feederできれいに表示されるように画像を埋め込み
+            html_content += f'<img src="{thumbnail_url}" alt="thumbnail">'
+        
+        if description:
+            escaped_desc = description.replace('\n', '<br>')
+            html_content += f'<br><br>{escaped_desc}'
+            
+        content.text = html_content
+        
+    tree = ET.ElementTree(feed)
     tree.write(output_file, encoding='utf-8', xml_declaration=True)
     return True
 
