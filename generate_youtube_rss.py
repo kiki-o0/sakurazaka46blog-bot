@@ -1,9 +1,10 @@
 import subprocess
 import sys
 import time
+from datetime import datetime
+import xml.etree.ElementTree as ET
 
 def install_yt_dlp():
-    # YouTubeのブロックを100%回避する最強ツール「yt-dlp」を自動インストール
     try:
         import yt_dlp
     except ImportError:
@@ -16,31 +17,29 @@ import yt_dlp
 def fetch_entries(url):
     ydl_opts = {
         'extract_flat': True,
-        'playlist_end': 10, # 最新10件ずつ取得
+        'playlist_end': 15,
         'quiet': True,
-        'no_warnings': True, # 警告を非表示
-        'ignoreerrors': True # エラーが起きても可能な限り取得したデータを返す
+        'no_warnings': True,
+        'ignoreerrors': True
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            if info:
-                return info.get('entries', [])
-            return []
+            if info and 'entries' in info:
+                return info['entries']
     except Exception as e:
         print(f"Error fetching {url}: {e}")
-        return []
+    return []
 
-def process_channel(channel_name, channel_id, output_file):
+def process_channel(channel_name, channel_id, playlist_id, output_file):
     print(f"Processing {channel_name}...")
     
-    # 通常の動画とショート動画を別々に取得して合体させる（ショート漏れを防止）
-    videos = fetch_entries(f"https://www.youtube.com/channel/{channel_id}/videos")
+    # ショート動画を含め安定して取得できる「アップロード動画プレイリスト」と「ショート専用URL」の両方を取得して合体
+    videos = fetch_entries(f"https://www.youtube.com/playlist?list={playlist_id}")
     shorts = fetch_entries(f"https://www.youtube.com/channel/{channel_id}/shorts")
     
     all_entries = videos + shorts
     
-    # 重複排除
     seen = set()
     unique_entries = []
     for entry in all_entries:
@@ -55,42 +54,51 @@ def process_channel(channel_name, channel_id, output_file):
         print(f"Skipped: Could not fetch any videos for {channel_name}")
         return False
 
-    # Feederで恐竜エラー（iframe化）を防ぐため、リッチなRSS 2.0形式で構築
-    rss_xml = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        '<rss version="2.0">',
-        '  <channel>',
-        f'    <title>{channel_name}</title>',
-        f'    <link>https://www.youtube.com/channel/{channel_id}</link>',
-        '    <description>YouTube Feed for Feeder</description>'
-    ]
+    # Feederが赤丸ボタン（手動取得）なしで本文を認識できるよう、ブログと同じAtom形式で生成
+    ET.register_namespace('', 'http://www.w3.org/2005/Atom')
+    feed = ET.Element('{http://www.w3.org/2005/Atom}feed')
     
+    title_elem = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}title')
+    title_elem.text = channel_name
+    
+    link_elem = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}link')
+    link_elem.set('href', f"https://www.youtube.com/channel/{channel_id}")
+    
+    updated_elem = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}updated')
+    updated_elem.text = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    id_elem = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}id')
+    id_elem.text = f"yt:channel:{channel_id}"
+
     for entry in unique_entries:
         vid = entry.get('id')
         title_raw = entry.get('title', 'No Title')
-        
-        # XML構文エラー防止のエスケープ
-        title = title_raw.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        title_cdata = title_raw.replace(']]>', ']]&gt;')
-        
         url = f"https://www.youtube.com/watch?v={vid}"
         thumbnail_url = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
         
-        # CDATAを使用して純粋なHTML記事として認識させる（画像＋タイトル＋リンクテキスト）
-        description = f'<![CDATA[<a href="{url}"><img src="{thumbnail_url}" alt="thumbnail" style="max-width: 100%;"></a><br><br><h3>{title_cdata}</h3><br><a href="{url}">YouTubeで開く</a>]]>'
+        entry_elem = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}entry')
         
-        rss_xml.append('    <item>')
-        rss_xml.append(f'      <title>{title}</title>')
-        rss_xml.append(f'      <link>{url}</link>')
-        rss_xml.append(f'      <guid isPermaLink="false">yt:video:{vid}</guid>')
-        rss_xml.append(f'      <description>{description}</description>')
-        rss_xml.append('    </item>')
+        e_title = ET.SubElement(entry_elem, '{http://www.w3.org/2005/Atom}title')
+        e_title.text = title_raw
         
-    rss_xml.append('  </channel>')
-    rss_xml.append('</rss>')
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write("\n".join(rss_xml))
+        e_link = ET.SubElement(entry_elem, '{http://www.w3.org/2005/Atom}link')
+        e_link.set('href', url)
+        
+        e_id = ET.SubElement(entry_elem, '{http://www.w3.org/2005/Atom}id')
+        e_id.text = f"yt:video:{vid}"
+        
+        e_updated = ET.SubElement(entry_elem, '{http://www.w3.org/2005/Atom}updated')
+        e_updated.text = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        # contentタグ（type="html"）を使用することでFeederの内部ブラウザ起動を回避
+        e_content = ET.SubElement(entry_elem, '{http://www.w3.org/2005/Atom}content')
+        e_content.set('type', 'html')
+        
+        html_content = f'<a href="{url}"><img src="{thumbnail_url}" alt="thumbnail" style="max-width: 100%;"></a><br><br><h3>{title_raw}</h3><br><a href="{url}">YouTubeで開く</a>'
+        e_content.text = html_content
+        
+    tree = ET.ElementTree(feed)
+    tree.write(output_file, encoding='utf-8', xml_declaration=True)
         
     print(f"Success: {channel_name} -> {output_file}")
     return True
@@ -100,17 +108,19 @@ def main():
         {
             "name": "櫻坂46 OFFICIAL YouTube CHANNEL",
             "channel_id": "UCmr9bYmymcBmQ1p2tLBRvwg",
+            "playlist_id": "UUmr9bYmymcBmQ1p2tLBRvwg", # アップロード動画プレイリスト
             "output_file": "youtube_official_rss.xml"
         },
         {
             "name": "櫻坂チャンネル",
             "channel_id": "UCDNDlqJRz4FsO_ByfUNOSuQ",
+            "playlist_id": "UUDNDlqJRz4FsO_ByfUNOSuQ", # アップロード動画プレイリスト
             "output_file": "youtube_sakurazaka_channel_rss.xml"
         }
     ]
     
     for ch in channels:
-        process_channel(ch["name"], ch["channel_id"], ch["output_file"])
+        process_channel(ch["name"], ch["channel_id"], ch["playlist_id"], ch["output_file"])
         time.sleep(1)
 
 if __name__ == "__main__":
