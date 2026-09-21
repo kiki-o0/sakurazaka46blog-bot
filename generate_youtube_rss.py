@@ -1,14 +1,11 @@
 import requests
 import xml.etree.ElementTree as ET
 import urllib.parse
-import time
 from datetime import datetime
 
 def process_channel(url, output_file):
-    # rss2json API経由で取得し、YouTube側のBotブロック(404)を完全に回避する。
-    # さらに30分ごとの更新を反映させるため(API側の1時間キャッシュを無効化するため)、ダミーのタイムスタンプを付与。
-    bypassed_url = f"{url}&_t={int(time.time())}"
-    encoded_url = urllib.parse.quote(bypassed_url)
+    # rss2json API経由で取得し、YouTube側のBotブロックを回避する。エラー原因となったキャッシュ回避用のダミーパラメータは削除。
+    encoded_url = urllib.parse.quote(url)
     api_url = f"https://api.rss2json.com/v1/api.json?rss_url={encoded_url}"
     
     try:
