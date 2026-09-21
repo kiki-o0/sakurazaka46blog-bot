@@ -1,6 +1,8 @@
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
+from email.utils import formatdate
 
 def install_yt_dlp():
     try:
@@ -51,7 +53,6 @@ def process_channel(channel_name, channel_id, playlist_id, output_file):
         print(f"Skipped: Could not fetch any videos for {channel_name}")
         return False
 
-    # Feederに「これが完全な記事本文だ」と認識させるため、content:encodedタグを含むRSS 2.0を直接構築
     rss_xml = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">',
@@ -71,14 +72,27 @@ def process_channel(channel_name, channel_id, playlist_id, output_file):
         url = f"https://www.youtube.com/watch?v={vid}"
         thumbnail_url = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
         
-        # CDATAで囲み、FeederがそのままHTMLとして解釈するようにする
+        # yt-dlpから取得したタイムスタンプまたはアップロード日をRSS形式に変換
+        pub_date = formatdate(time.time(), localtime=False)
+        timestamp = entry.get('timestamp')
+        upload_date_str = entry.get('upload_date')
+        
+        if timestamp:
+            pub_date = formatdate(timestamp, localtime=False)
+        elif upload_date_str and len(upload_date_str) == 8:
+            try:
+                dt = datetime.strptime(upload_date_str, '%Y%m%d').replace(tzinfo=timezone.utc)
+                pub_date = formatdate(dt.timestamp(), localtime=False)
+            except ValueError:
+                pass
+        
         html_content = f'<![CDATA[<a href="{url}"><img src="{thumbnail_url}" alt="thumbnail" style="max-width: 100%;"></a><br><br><h3>{title_cdata}</h3><br><a href="{url}">YouTubeで開く</a>]]>'
         
         rss_xml.append('    <item>')
         rss_xml.append(f'      <title>{title}</title>')
         rss_xml.append(f'      <link>{url}</link>')
         rss_xml.append(f'      <guid isPermaLink="false">yt:video:{vid}</guid>')
-        # descriptionとcontent:encodedの両方に同じ完全なHTMLを入れることでFeederの自動スクレイピングを防止
+        rss_xml.append(f'      <pubDate>{pub_date}</pubDate>')
         rss_xml.append(f'      <description>{html_content}</description>')
         rss_xml.append(f'      <content:encoded>{html_content}</content:encoded>')
         rss_xml.append('    </item>')
