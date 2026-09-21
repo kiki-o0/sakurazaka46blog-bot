@@ -18,11 +18,15 @@ def fetch_entries(url):
         'extract_flat': True,
         'playlist_end': 10, # 最新10件ずつ取得
         'quiet': True,
+        'no_warnings': True, # 警告を非表示
+        'ignoreerrors': True # エラーが起きても可能な限り取得したデータを返す
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            return info.get('entries', [])
+            if info:
+                return info.get('entries', [])
+            return []
     except Exception as e:
         print(f"Error fetching {url}: {e}")
         return []
@@ -40,6 +44,8 @@ def process_channel(channel_name, channel_id, output_file):
     seen = set()
     unique_entries = []
     for entry in all_entries:
+        if not entry:
+            continue
         vid = entry.get('id')
         if vid and vid not in seen:
             seen.add(vid)
