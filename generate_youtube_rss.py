@@ -16,8 +16,8 @@ import yt_dlp
 
 def fetch_entries(url):
     ydl_opts = {
-        'extract_flat': False, # 変更: 軽量モードを解除し、各動画のタイムスタンプ等の詳細データを確実に取得する
-        'playlist_end': 15,
+        'extract_flat': True, # Botブロック回避のため、詳細ページまで潜らない軽量モード
+        'playlist_end': 5,    # 既存の投稿は最新5件のみに制限
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': True
@@ -92,7 +92,6 @@ def process_channel(channel_name, channel_id, playlist_id, output_file):
         rss_xml.append(f'      <link>{url}</link>')
         rss_xml.append(f'      <guid isPermaLink="false">yt:video:{vid}</guid>')
         
-        # 変更: 正確な日付が取得できた場合のみpubDateを記述する（現在時刻での上書きループを防止）
         if pub_date:
             rss_xml.append(f'      <pubDate>{pub_date}</pubDate>')
             
