@@ -1,104 +1,92 @@
-import requests
-import xml.etree.ElementTree as ET
-import urllib.parse
+import subprocess
+import sys
 import time
-from datetime import datetime
-from email.utils import parsedate_to_datetime
 
-def fetch_xml(channel_id):
-    # 複数のRSSHub公開サーバーを巡回し、YouTubeのBotブロックを回避して取得する
-    instances = [
-        "https://rsshub.app",
-        "https://rsshub.rssforever.com",
-        "https://rsshub.ktachibana.party",
-        "https://rsshub.lipten.link"
-    ]
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+def install_yt_dlp():
+    # YouTubeのブロックを100%回避する最強ツール「yt-dlp」を自動インストール
+    try:
+        import yt_dlp
+    except ImportError:
+        print("Installing yt-dlp...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp"])
+
+install_yt_dlp()
+import yt_dlp
+
+def fetch_entries(url):
+    ydl_opts = {
+        'extract_flat': True,
+        'playlist_end': 10, # 最新10件ずつ取得
+        'quiet': True,
     }
-    
-    for instance in instances:
-        url = f"{instance}/youtube/channel/{channel_id}"
-        try:
-            response = requests.get(url, headers=headers, timeout=15)
-            if response.status_code == 200:
-                print(f"  [Info] Fetched successfully from: {instance}")
-                return response.content
-        except Exception as e:
-            print(f"  [Info] Failed with {instance}: {e}")
-        time.sleep(1)
-        
-    return None
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return info.get('entries', [])
+    except Exception as e:
+        print(f"Error fetching {url}: {e}")
+        return []
 
 def process_channel(channel_name, channel_id, output_file):
-    content = fetch_xml(channel_id)
-    if not content:
-        print(f"Skipped: All fetch attempts failed for {channel_name}")
+    print(f"Processing {channel_name}...")
+    
+    # 通常の動画とショート動画を別々に取得して合体させる（ショート漏れを防止）
+    videos = fetch_entries(f"https://www.youtube.com/channel/{channel_id}/videos")
+    shorts = fetch_entries(f"https://www.youtube.com/channel/{channel_id}/shorts")
+    
+    all_entries = videos + shorts
+    
+    # 重複排除
+    seen = set()
+    unique_entries = []
+    for entry in all_entries:
+        vid = entry.get('id')
+        if vid and vid not in seen:
+            seen.add(vid)
+            unique_entries.append(entry)
+            
+    if not unique_entries:
+        print(f"Skipped: Could not fetch any videos for {channel_name}")
         return False
 
-    try:
-        root = ET.fromstring(content)
-    except ET.ParseError as e:
-        print(f"XML Parse Error: {e}")
-        return False
-        
-    # Feeder向けに、出力用のAtomフィードを新規構築
-    ET.register_namespace('', 'http://www.w3.org/2005/Atom')
-    feed = ET.Element('{http://www.w3.org/2005/Atom}feed')
+    # Feederで恐竜エラー（iframe化）を防ぐため、リッチなRSS 2.0形式で構築
+    rss_xml = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<rss version="2.0">',
+        '  <channel>',
+        f'    <title>{channel_name}</title>',
+        f'    <link>https://www.youtube.com/channel/{channel_id}</link>',
+        '    <description>YouTube Feed for Feeder</description>'
+    ]
     
-    title_elem = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}title')
-    title_elem.text = channel_name
+    for entry in unique_entries:
+        vid = entry.get('id')
+        title_raw = entry.get('title', 'No Title')
+        
+        # XML構文エラー防止のエスケープ
+        title = title_raw.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        title_cdata = title_raw.replace(']]>', ']]&gt;')
+        
+        url = f"https://www.youtube.com/watch?v={vid}"
+        thumbnail_url = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
+        
+        # CDATAを使用して純粋なHTML記事として認識させる（画像＋タイトル＋リンクテキスト）
+        description = f'<![CDATA[<a href="{url}"><img src="{thumbnail_url}" alt="thumbnail" style="max-width: 100%;"></a><br><br><h3>{title_cdata}</h3><br><a href="{url}">YouTubeで開く</a>]]>'
+        
+        rss_xml.append('    <item>')
+        rss_xml.append(f'      <title>{title}</title>')
+        rss_xml.append(f'      <link>{url}</link>')
+        rss_xml.append(f'      <guid isPermaLink="false">yt:video:{vid}</guid>')
+        rss_xml.append(f'      <description>{description}</description>')
+        rss_xml.append('    </item>')
+        
+    rss_xml.append('  </channel>')
+    rss_xml.append('</rss>')
     
-    # RSSHubのデフォルト出力である RSS 2.0 形式の <item> を処理
-    for item in root.findall('.//item'):
-        entry = ET.SubElement(feed, '{http://www.w3.org/2005/Atom}entry')
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write("\n".join(rss_xml))
         
-        title = ET.SubElement(entry, '{http://www.w3.org/2005/Atom}title')
-        item_title = item.find('title')
-        title.text = item_title.text if item_title is not None else ""
-        
-        link = ET.SubElement(entry, '{http://www.w3.org/2005/Atom}link')
-        item_link = item.find('link')
-        link_href = item_link.text if item_link is not None else ""
-        link.set('href', link_href)
-        
-        entry_id = ET.SubElement(entry, '{http://www.w3.org/2005/Atom}id')
-        entry_id.text = link_href
-        
-        updated = ET.SubElement(entry, '{http://www.w3.org/2005/Atom}updated')
-        item_pubDate = item.find('pubDate')
-        if item_pubDate is not None and item_pubDate.text:
-            try:
-                dt = parsedate_to_datetime(item_pubDate.text)
-                updated.text = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-            except Exception:
-                updated.text = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        else:
-            updated.text = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        
-        # リンクからビデオIDを抽出
-        video_id = ""
-        if "watch?v=" in link_href:
-            parsed_url = urllib.parse.urlparse(link_href)
-            qs = urllib.parse.parse_qs(parsed_url.query)
-            video_id = qs.get("v", [""])[0]
-        
-        # HTML本文作成 (Feederエラーの原因となる埋め込みプレイヤーを完全に排除)
-        content_elem = ET.Element('{http://www.w3.org/2005/Atom}content')
-        content_elem.set('type', 'html')
-        
-        # ただ純粋にサムネイル画像のURLを生成し、imgタグだけで表示させる
-        if video_id:
-            thumbnail_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
-            content_elem.text = f'<img src="{thumbnail_url}" alt="thumbnail">'
-        else:
-            content_elem.text = "No Image"
-            
-        entry.append(content_elem)
-        
-    tree = ET.ElementTree(feed)
-    tree.write(output_file, encoding='utf-8', xml_declaration=True)
+    print(f"Success: {channel_name} -> {output_file}")
     return True
 
 def main():
@@ -116,11 +104,8 @@ def main():
     ]
     
     for ch in channels:
-        print(f"Processing {ch['name']}...")
-        success = process_channel(ch["name"], ch["channel_id"], ch["output_file"])
-        if success:
-            print(f"Success: {ch['name']} -> {ch['output_file']}")
-        time.sleep(2)
+        process_channel(ch["name"], ch["channel_id"], ch["output_file"])
+        time.sleep(1)
 
 if __name__ == "__main__":
     main()
