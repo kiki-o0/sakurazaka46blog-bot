@@ -1,39 +1,25 @@
 import requests
 import xml.etree.ElementTree as ET
+import time
 
-def fetch_xml(channel_id):
-    # rss2jsonもYouTubeからブロックされているため、YouTubeの代替サイト（Invidious）のRSSからデータを取得する
-    urls = [
-        f"https://vid.puffyan.us/feed/channel/{channel_id}",
-        f"https://yewtu.be/feed/channel/{channel_id}",
-        f"https://invidious.flokinet.to/feed/channel/{channel_id}",
-        f"https://invidious.nerdvpn.de/feed/channel/{channel_id}"
-    ]
+def process_channel(channel_name, playlist_id, output_file):
+    # チャンネルIDの先頭「UC」を「UU」に変えると「アップロード動画プレイリスト」のIDになる。
+    # プレイリストのRSSフィードは、チャンネルフィードよりもボット制限が緩い。
+    url = f"https://www.youtube.com/feeds/videos.xml?playlist_id={playlist_id}"
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/xml, text/xml, */*; q=0.01'
     }
     
-    for url in urls:
-        try:
-            response = requests.get(url, headers=headers, timeout=15)
-            if response.status_code == 200:
-                print(f"  [Info] Fetched successfully from: {url}")
-                return response.content
-            else:
-                print(f"  [Info] Status {response.status_code} for {url}")
-        except Exception as e:
-            print(f"  [Info] Error for {url}: {e}")
-            
-    return None
-
-def process_channel(channel_id, output_file):
-    content = fetch_xml(channel_id)
-    if not content:
-        print(f"Skipped: All fetch attempts failed for channel_id={channel_id}")
+    try:
+        response = requests.get(url, headers=headers, timeout=20)
+        response.raise_for_status()
+        content = response.content
+    except requests.exceptions.RequestException as e:
+        print(f"Request Error for {url}: {e}")
         return False
-        
-    # 名前空間の設定
+
     ET.register_namespace('', 'http://www.w3.org/2005/Atom')
     ET.register_namespace('yt', 'http://www.youtube.com/xml/schemas/2015')
     ET.register_namespace('media', 'http://search.yahoo.com/mrss/')
@@ -51,26 +37,12 @@ def process_channel(channel_id, output_file):
     }
     
     for entry in root.findall('atom:entry', ns):
-        # ビデオIDを取得
         video_id_elem = entry.find('yt:videoId', ns)
         if video_id_elem is not None and video_id_elem.text:
             video_id = video_id_elem.text
         else:
-            entry_id = entry.find('atom:id', ns)
-            video_id = entry_id.text.replace('yt:video:', '') if entry_id is not None and entry_id.text else ""
-        
-        # リンク先を公式YouTubeに強制書き換え
-        link = entry.find('atom:link', ns)
-        if link is not None:
-            link.set('href', f"https://www.youtube.com/watch?v={video_id}")
+            continue
             
-        author = entry.find('atom:author', ns)
-        if author is not None:
-            uri = author.find('atom:uri', ns)
-            if uri is not None:
-                uri.text = f"https://www.youtube.com/channel/{channel_id}"
-        
-        # HTMLコンテンツの作成
         content_elem = ET.Element('{http://www.w3.org/2005/Atom}content')
         content_elem.set('type', 'html')
         
@@ -101,21 +73,22 @@ def main():
     channels = [
         {
             "name": "櫻坂46 OFFICIAL YouTube CHANNEL",
-            "channel_id": "UCmr9bYmymcBmQ1p2tLBRvwg",
+            "playlist_id": "UUmr9bYmymcBmQ1p2tLBRvwg", 
             "output_file": "youtube_official_rss.xml"
         },
         {
             "name": "櫻坂チャンネル",
-            "channel_id": "UCDNDlqJRz4FsO_ByfUNOSuQ",
+            "playlist_id": "UUDNDlqJRz4FsO_ByfUNOSuQ",
             "output_file": "youtube_sakurazaka_channel_rss.xml"
         }
     ]
     
     for ch in channels:
         print(f"Processing {ch['name']}...")
-        success = process_channel(ch["channel_id"], ch["output_file"])
+        success = process_channel(ch["name"], ch["playlist_id"], ch["output_file"])
         if success:
             print(f"Success: {ch['name']} -> {ch['output_file']}")
+        time.sleep(2)
 
 if __name__ == "__main__":
     main()
