@@ -16,7 +16,7 @@ import yt_dlp
 
 def fetch_entries(url):
     ydl_opts = {
-        'extract_flat': True,
+        'extract_flat': False, # 変更: 軽量モードを解除し、各動画のタイムスタンプ等の詳細データを確実に取得する
         'playlist_end': 15,
         'quiet': True,
         'no_warnings': True,
@@ -72,8 +72,7 @@ def process_channel(channel_name, channel_id, playlist_id, output_file):
         url = f"https://www.youtube.com/watch?v={vid}"
         thumbnail_url = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
         
-        # yt-dlpから取得したタイムスタンプまたはアップロード日をRSS形式に変換
-        pub_date = formatdate(time.time(), localtime=False)
+        pub_date = None
         timestamp = entry.get('timestamp')
         upload_date_str = entry.get('upload_date')
         
@@ -92,7 +91,11 @@ def process_channel(channel_name, channel_id, playlist_id, output_file):
         rss_xml.append(f'      <title>{title}</title>')
         rss_xml.append(f'      <link>{url}</link>')
         rss_xml.append(f'      <guid isPermaLink="false">yt:video:{vid}</guid>')
-        rss_xml.append(f'      <pubDate>{pub_date}</pubDate>')
+        
+        # 変更: 正確な日付が取得できた場合のみpubDateを記述する（現在時刻での上書きループを防止）
+        if pub_date:
+            rss_xml.append(f'      <pubDate>{pub_date}</pubDate>')
+            
         rss_xml.append(f'      <description>{html_content}</description>')
         rss_xml.append(f'      <content:encoded>{html_content}</content:encoded>')
         rss_xml.append('    </item>')
