@@ -1,1 +1,1 @@
-# sakurazaka46blog-Instagram-Checker
+# sakurazaka46-Checker
