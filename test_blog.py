@@ -37,9 +37,19 @@ def parse_article(url):
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     
+    # 詳細ページから時刻付きの日付文字列を取得
+    detailed_date = ""
+    date_tags = soup.find_all(class_="date")
+    for tag in date_tags:
+        text = tag.get_text(strip=True)
+        # 時刻らしきもの(HH:MM)が含まれているかチェック
+        if re.search(r'\d{1,2}:\d{2}', text):
+            detailed_date = text
+            break
+            
     article = soup.find(class_="box-article")
     if not article:
-        return ""
+        return "", detailed_date
         
     # 1. 既知のプロモーション用クラスを持つブロックを丸ごと削除
     for guide in article.find_all(class_=lambda x: x and 'app_guide' in x):
@@ -77,7 +87,7 @@ def parse_article(url):
                 if line:
                     elements.append("<p>" + escape(line) + "</p>")
                     
-    return chr(10).join(elements)
+    return chr(10).join(elements), detailed_date
 
 def generate_feed_for_member(member_id):
     list_url = f"{BASE_URL}/s/s46/diary/blog/list?ct={member_id}"
@@ -112,16 +122,19 @@ def generate_feed_for_member(member_id):
         title_tag = post.find(class_="title")
         title = title_tag.text.strip() if title_tag else "無題"
         
-        date_tag = post.find(class_="date")
-        date_str = date_tag.text.strip() if date_tag else ""
-        entry_updated = parse_date_to_iso(date_str)
+        print(f"  -> 記事取得中: {title}")
+        content, detailed_date = parse_article(article_url)
+        time.sleep(1)
+        
+        # 詳細から時刻が取れなければリストのdateをフォールバックとして使う
+        if not detailed_date:
+            date_tag = post.find(class_="date")
+            detailed_date = date_tag.text.strip() if date_tag else ""
+            
+        entry_updated = parse_date_to_iso(detailed_date)
         
         if not feed_updated:
             feed_updated = entry_updated
-            
-        print(f"  -> 記事取得中: {title}")
-        content = parse_article(article_url)
-        time.sleep(1)
         
         entry = f"""
   <entry>
