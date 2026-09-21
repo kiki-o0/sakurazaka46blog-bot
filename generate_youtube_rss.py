@@ -1,14 +1,15 @@
+import os
 import subprocess
 import sys
 import time
 from datetime import datetime, timezone
+import xml.etree.ElementTree as ET
 from email.utils import formatdate
 
 def install_yt_dlp():
     try:
         import yt_dlp
     except ImportError:
-        print("Installing yt-dlp...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp"])
 
 install_yt_dlp()
@@ -16,8 +17,8 @@ import yt_dlp
 
 def fetch_entries(url):
     ydl_opts = {
-        'extract_flat': True, # Botブロック回避のため、詳細ページまで潜らない軽量モード
-        'playlist_end': 5,    # 既存の投稿は最新5件のみに制限
+        'extract_flat': True,
+        'playlist_end': 5,
         'quiet': True,
         'no_warnings': True,
         'ignoreerrors': True
@@ -28,11 +29,27 @@ def fetch_entries(url):
             if info and 'entries' in info:
                 return info['entries']
     except Exception as e:
-        print(f"Error fetching {url}: {e}")
+        pass
     return []
 
+def get_existing_dates(output_file):
+    existing_dates = {}
+    if os.path.exists(output_file):
+        try:
+            tree = ET.parse(output_file)
+            root = tree.getroot()
+            for item in root.findall('.//item'):
+                guid_elem = item.find('guid')
+                pub_elem = item.find('pubDate')
+                if guid_elem is not None and pub_elem is not None and guid_elem.text:
+                    vid = guid_elem.text.replace('yt:video:', '')
+                    existing_dates[vid] = pub_elem.text
+        except Exception:
+            pass
+    return existing_dates
+
 def process_channel(channel_name, channel_id, playlist_id, output_file):
-    print(f"Processing {channel_name}...")
+    existing_dates = get_existing_dates(output_file)
     
     videos = fetch_entries(f"https://www.youtube.com/playlist?list={playlist_id}")
     shorts = fetch_entries(f"https://www.youtube.com/channel/{channel_id}/shorts")
@@ -50,7 +67,6 @@ def process_channel(channel_name, channel_id, playlist_id, output_file):
             unique_entries.append(entry)
             
     if not unique_entries:
-        print(f"Skipped: Could not fetch any videos for {channel_name}")
         return False
 
     rss_xml = [
@@ -62,7 +78,9 @@ def process_channel(channel_name, channel_id, playlist_id, output_file):
         '    <description>YouTube Feed for Feeder</description>'
     ]
     
-    for entry in unique_entries:
+    current_time_base = time.time()
+    
+    for index, entry in enumerate(unique_entries):
         vid = entry.get('id')
         title_raw = entry.get('title', 'No Title')
         
@@ -85,16 +103,20 @@ def process_channel(channel_name, channel_id, playlist_id, output_file):
             except ValueError:
                 pass
         
+        if not pub_date:
+            if vid in existing_dates:
+                pub_date = existing_dates[vid]
+            else:
+                fallback_time = current_time_base - (index * 60)
+                pub_date = formatdate(fallback_time, localtime=False)
+        
         html_content = f'<![CDATA[<a href="{url}"><img src="{thumbnail_url}" alt="thumbnail" style="max-width: 100%;"></a><br><br><h3>{title_cdata}</h3><br><a href="{url}">YouTubeで開く</a>]]>'
         
         rss_xml.append('    <item>')
         rss_xml.append(f'      <title>{title}</title>')
         rss_xml.append(f'      <link>{url}</link>')
         rss_xml.append(f'      <guid isPermaLink="false">yt:video:{vid}</guid>')
-        
-        if pub_date:
-            rss_xml.append(f'      <pubDate>{pub_date}</pubDate>')
-            
+        rss_xml.append(f'      <pubDate>{pub_date}</pubDate>')
         rss_xml.append(f'      <description>{html_content}</description>')
         rss_xml.append(f'      <content:encoded>{html_content}</content:encoded>')
         rss_xml.append('    </item>')
@@ -105,7 +127,6 @@ def process_channel(channel_name, channel_id, playlist_id, output_file):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write("\n".join(rss_xml))
         
-    print(f"Success: {channel_name} -> {output_file}")
     return True
 
 def main():
