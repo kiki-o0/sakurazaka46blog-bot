@@ -1,21 +1,23 @@
 import requests
 import xml.etree.ElementTree as ET
+import urllib.parse
 
 def process_channel(url, output_file):
+    # GitHub ActionsのIP制限による404エラーを回避するため、プロキシAPIを経由する
+    encoded_url = urllib.parse.quote(url)
+    proxy_url = f"https://api.allorigins.win/raw?url={encoded_url}"
+    
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(proxy_url, headers=headers, timeout=20)
         
-        if response.status_code == 404:
-            print(f"Skipped: 404 Not Found (YouTube側の仕様による一時的なアクセス制限) - {url}")
+        if response.status_code != 200:
+            print(f"Skipped: Status {response.status_code} - {url}")
             return False
             
-        response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print(f"Request Error: {e}")
         return False
