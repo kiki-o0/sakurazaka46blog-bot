@@ -31,5 +31,5 @@ jobs:
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git add youtube_official_rss.xml youtube_sakurazaka_channel_rss.xml
+          git add -A
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update YouTube RSS" && git push)
