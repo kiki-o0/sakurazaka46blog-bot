@@ -50,7 +50,6 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     
     # ページ内の画像を解析（メンバーごとのカード・フォトの画像を抽出）
-    # 公式サイトの構造に合わせてimgタグを探索
     images_info = []
     seen_urls = set()
     
@@ -74,7 +73,7 @@ def main():
                 
     print(f"検出された画像数: {len(images_info)}件")
     
-    # 画像をダウンロード（オプションとしてローカルに保存）
+    # 画像をダウンロード（ローカルに保存）
     downloaded_images = []
     for i, img_url in enumerate(images_info):
         try:
@@ -120,7 +119,8 @@ def main():
     item_desc = ET.SubElement(item, "description")
     desc_html = f"<p>{current_year_month}度のグリーティング画像が更新されました。</p>"
     for img in downloaded_images:
-        desc_html += f'<br><img src="{img["url"]}" />'
+        # 画像をリンク(<a>)で囲み、タップで元画像URLを開けるように修正
+        desc_html += f'<br><a href="{img["url"]}" target="_blank"><img src="{img["url"]}" style="max-width:100%;" /></a>'
     item_desc.text = desc_html
 
     tree = ET.ElementTree(rss_root)
