@@ -1,4 +1,4 @@
-name: Generate and deploy blog all RSS
+name: Generate and deploy sakura blog all RSS
 
 on:
   workflow_dispatch:
