@@ -47,13 +47,17 @@ def main():
         
     soup = BeautifulSoup(response.text, "html.parser")
     
-    # ページ内の画像を解析（メンバーごとのカード・フォトの画像を抽出）
+    # ページ内の画像を解析（グリーティングカード・フォトの画像に特化して抽出）
     images_info = []
     seen_urls = set()
     
     for img in soup.find_all("img"):
         src = img.get("src") or img.get("data-src")
         if src and "/images/" in src:
+            # 共通アイコンやバナーを除外し、グリカ・フォト等のコンテンツ画像を確実に狙う
+            if "common" in src or "icon" in src or "banner" in src:
+                continue
+                
             # 絶対パスに変換
             if src.startswith("//"):
                 img_url = "https:" + src
@@ -69,7 +73,7 @@ def main():
                 seen_urls.add(img_url)
                 images_info.append(img_url)
                 
-    print(f"検出された画像数: {len(images_info)}件")
+    print(f"検出された対象画像数: {len(images_info)}件")
     
     if not images_info:
         print("画像が検出されませんでした。処理を中断します。")
@@ -87,11 +91,6 @@ def main():
             state["last_fetched_month"] = last_year_month
             with open(STATE_FILE, "w", encoding="utf-8") as f:
                 json.dump(state, f, ensure_ascii=False, indent=2)
-        return
-
-    # すでに今月分を取得済みの場合は即座に終了（お休みモード）
-    if last_fetched_month == current_year_month:
-        print(f"今月({current_year_month})分はすでに取得済みです。処理を終了します。")
         return
 
     print("新しい月のグリーティング画像への更新を確認しました！")
@@ -162,4 +161,3 @@ def main():
     print("今月分の処理が完了しました。")
 
 if __name__ == "__main__":
-    main()
