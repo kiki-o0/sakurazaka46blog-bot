@@ -17,6 +17,11 @@ def main():
     now = datetime.datetime.now()
     current_year_month = now.strftime("%Y-%m")
     
+    # 前月の年月を計算 (例: "2026-09")
+    first_day_of_this_month = now.replace(day=1)
+    last_month_date = first_day_of_this_month - datetime.timedelta(days=1)
+    last_year_month = last_month_date.strftime("%Y-%m")
+
     # 状態ファイル読み込み
     state = {}
     if os.path.exists(STATE_FILE):
@@ -29,11 +34,6 @@ def main():
     last_fetched_month = state.get("last_fetched_month")
     last_fetched_urls = state.get("last_fetched_urls", [])
     
-    # すでに今月分を取得済みの場合は即座に終了（お休みモード）
-    if last_fetched_month == current_year_month:
-        print(f"今月({current_year_month})分はすでに取得済みです。処理を終了します。")
-        return
-
     print(f"グリーティングページ ({TARGET_URL}) の取得を開始します...")
     
     headers = {
@@ -80,7 +80,18 @@ def main():
     previous_urls_sorted = sorted(last_fetched_urls)
 
     if last_fetched_urls and current_urls_sorted == previous_urls_sorted:
-        print("公式サイトの画像はまだ前月(または前回)から更新されていません。次回の確認まで待機します。")
+        print("公式サイトの画像はまだ前月(または前回)から更新されていません。今月分の取得を見送ります。")
+        # 誤って今月分として記録されていた場合は自動で前月状態に差し戻す
+        if last_fetched_month == current_year_month:
+            print("ステートが今月分として誤記録されていたため、前月状態に差し戻します。")
+            state["last_fetched_month"] = last_year_month
+            with open(STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+        return
+
+    # すでに今月分を取得済みの場合は即座に終了（お休みモード）
+    if last_fetched_month == current_year_month:
+        print(f"今月({current_year_month})分はすでに取得済みです。処理を終了します。")
         return
 
     print("新しい月のグリーティング画像への更新を確認しました！")
