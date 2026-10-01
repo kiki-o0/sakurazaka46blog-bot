@@ -120,37 +120,60 @@ def main():
         except Exception as e:
             print(f"画像のダウンロードに失敗しました ({img_url}): {e}")
 
+    # 既存のRSSファイルがあれば読み込み、過去のアイテムを蓄積保持する
+    existing_items = []
+    if os.path.exists(RSS_FILE):
+        try:
+            tree_old = ET.parse(RSS_FILE)
+            root_old = tree_old.getroot()
+            channel_old = root_old.find("channel")
+            if channel_old is not None:
+                for item_elem in channel_old.findall("item"):
+                    guid_elem = item_elem.find("guid")
+                    if guid_elem is not None and guid_elem.text == f"sakurazaka46-greeting-{current_year_month}":
+                        continue
+                    existing_items.append(item_elem)
+        except Exception as e:
+            print(f"既存RSSの読み込みに失敗しました（新規作成します）: {e}")
+            existing_items = []
+
     # RSS (Atom/XML) の生成
     rss_root = ET.Element("rss", version="2.0")
     channel = ET.SubElement(rss_root, "channel")
     
     title_elem = ET.SubElement(channel, "title")
-    title_elem.text = f"櫻坂46 グリーティング ({current_year_month})"
+    title_elem.text = "櫻坂46 グリーティング"
     
     link_elem = ET.SubElement(channel, "link")
     link_elem.text = TARGET_URL
     
     desc_elem = ET.SubElement(channel, "description")
-    desc_elem.text = f"櫻坂46 グリーティングページ更新情報 ({current_year_month})"
+    desc_elem.text = "櫻坂46 グリーティングページ更新情報"
     
-    item = ET.SubElement(channel, "item")
-    item_title = ET.SubElement(item, "title")
+    # 新しい月のアイテムを作成（RSSリーダー対策としてリンクに月別のハッシュを付与）
+    new_item = ET.Element("item")
+    item_title = ET.SubElement(new_item, "title")
     item_title.text = f"櫻坂46 グリーティングカード・フォト ({current_year_month})"
     
-    item_link = ET.SubElement(item, "link")
-    item_link.text = TARGET_URL
+    item_link = ET.SubElement(new_item, "link")
+    item_link.text = f"{TARGET_URL}#{current_year_month}"
     
-    item_guid = ET.SubElement(item, "guid")
+    item_guid = ET.SubElement(new_item, "guid")
     item_guid.text = f"sakurazaka46-greeting-{current_year_month}"
     
-    item_pub = ET.SubElement(item, "pubDate")
+    item_pub = ET.SubElement(new_item, "pubDate")
     item_pub.text = now.strftime("%a, %d %b %Y %H:%M:%S +0900")
     
-    item_desc = ET.SubElement(item, "description")
+    item_desc = ET.SubElement(new_item, "description")
     desc_html = f"<p>{current_year_month}度のグリーティング画像が更新されました。</p>"
     for img in downloaded_images:
         desc_html += f'<br><a href="{img["url"]}" target="_blank"><img src="{img["url"]}" style="max-width:100%;" /></a>'
     item_desc.text = desc_html
+
+    # 新しいアイテムを先頭に追加し、過去のアイテムを後ろに繋げる
+    channel.append(new_item)
+    for old_item in existing_items:
+        channel.append(old_item)
 
     tree = ET.ElementTree(rss_root)
     tree.write(RSS_FILE, encoding="utf-8", xml_declaration=True)
