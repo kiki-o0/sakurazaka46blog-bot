@@ -5,6 +5,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
+import hashlib
 
 # 設定
 TARGET_URL = "https://sakurazaka46.com/s/s46/page/greeting"
@@ -32,7 +33,7 @@ def main():
             state = {}
             
     last_fetched_month = state.get("last_fetched_month")
-    last_fetched_urls = state.get("last_fetched_urls", [])
+    last_fetched_hashes = state.get("last_fetched_hashes", [])
     
     print(f"グリーティングページ ({TARGET_URL}) の取得を開始します...")
     
@@ -79,12 +80,41 @@ def main():
         print("画像が検出されませんでした。処理を中断します。")
         return
 
-    # 前回の画像URLリストと比較し、まだ更新されていないかチェック
-    current_urls_sorted = sorted(images_info)
-    previous_urls_sorted = sorted(last_fetched_urls)
+    # 各画像をダウンロードしてハッシュを計算（URLが同じでも中身の変更を正確に検知するため）
+    os.makedirs(IMAGE_DIR, exist_ok=True)
+    
+    downloaded_images = []
+    current_hashes = []
+    for i, img_url in enumerate(images_info):
+        try:
+            img_res = requests.get(img_url, headers=headers, timeout=10)
+            if img_res.status_code == 200:
+                img_content = img_res.content
+                img_hash = hashlib.sha256(img_content).hexdigest()
+                current_hashes.append(img_hash)
+                
+                filename = f"{current_year_month}_{i+1}.jpg"
+                filepath = os.path.join(IMAGE_DIR, filename)
+                with open(filepath, "wb") as f:
+                    f.write(img_content)
+                downloaded_images.append({
+                    "url": img_url,
+                    "local_path": filepath,
+                    "hash": img_hash
+                })
+        except Exception as e:
+            print(f"画像のダウンロードに失敗しました ({img_url}): {e}")
 
-    if last_fetched_urls and current_urls_sorted == previous_urls_sorted:
-        print("公式サイトの画像はまだ前月(または前回)から更新されていません。今月分の取得を見送ります。")
+    if not current_hashes:
+        print("画像のハッシュが取得できませんでした。処理を中断します。")
+        return
+
+    current_hashes_sorted = sorted(current_hashes)
+    previous_hashes_sorted = sorted(last_fetched_hashes)
+
+    # ハッシュが前回と完全に同じ場合は更新されていないと判定
+    if last_fetched_hashes and current_hashes_sorted == previous_hashes_sorted:
+        print("公式サイトの画像の中身はまだ前月(または前回)から更新されていません。今月分の取得を見送ります。")
         # 誤って今月分として記録されていた場合は自動で前月状態に差し戻す
         if last_fetched_month == current_year_month:
             print("ステートが今月分として誤記録されていたため、前月状態に差し戻します。")
@@ -99,26 +129,6 @@ def main():
         return
 
     print("新しい月のグリーティング画像への更新を確認しました！")
-
-    # 画像保存ディレクトリの作成
-    os.makedirs(IMAGE_DIR, exist_ok=True)
-    
-    # 画像をダウンロード（ローカルに保存）
-    downloaded_images = []
-    for i, img_url in enumerate(images_info):
-        try:
-            img_res = requests.get(img_url, headers=headers, timeout=10)
-            if img_res.status_code == 200:
-                filename = f"{current_year_month}_{i+1}.jpg"
-                filepath = os.path.join(IMAGE_DIR, filename)
-                with open(filepath, "wb") as f:
-                    f.write(img_res.content)
-                downloaded_images.append({
-                    "url": img_url,
-                    "local_path": filepath
-                })
-        except Exception as e:
-            print(f"画像のダウンロードに失敗しました ({img_url}): {e}")
 
     # 既存のRSSファイルがあれば読み込み、過去のアイテムを蓄積保持する
     existing_items = []
@@ -179,9 +189,9 @@ def main():
     tree.write(RSS_FILE, encoding="utf-8", xml_declaration=True)
     print(f"RSSファイルを生成しました: {RSS_FILE}")
 
-    # 状態を保存（今月分を取得済みとして記録し、今回の画像URLも保存）
+    # 状態を保存（今月分を取得済みとして記録し、今回の画像ハッシュも保存）
     state["last_fetched_month"] = current_year_month
-    state["last_fetched_urls"] = images_info
+    state["last_fetched_hashes"] = current_hashes
     state["updated_at"] = now.isoformat()
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
