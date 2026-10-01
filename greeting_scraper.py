@@ -13,11 +13,11 @@ RSS_FILE = "greeting_rss.xml"
 IMAGE_DIR = "greeting_images"
 
 def main():
-    # 現在の年月を取得 (例: "2026-09")
+    # 現在の年月を取得 (例: "2026-10")
     now = datetime.datetime.now()
     current_year_month = now.strftime("%Y-%m")
     
-    # 状態ファイル読み込み（今月分がすでに取得済みか確認）
+    # 状態ファイル読み込み
     state = {}
     if os.path.exists(STATE_FILE):
         try:
@@ -27,8 +27,9 @@ def main():
             state = {}
             
     last_fetched_month = state.get("last_fetched_month")
+    last_fetched_urls = state.get("last_fetched_urls", [])
     
-    # すでに今月分を取得済みの場合はスキップ
+    # すでに今月分を取得済みの場合は即座に終了（お休みモード）
     if last_fetched_month == current_year_month:
         print(f"今月({current_year_month})分はすでに取得済みです。処理を終了します。")
         return
@@ -45,9 +46,6 @@ def main():
         return
         
     soup = BeautifulSoup(response.text, "html.parser")
-    
-    # 画像保存ディレクトリの作成
-    os.makedirs(IMAGE_DIR, exist_ok=True)
     
     # ページ内の画像を解析（メンバーごとのカード・フォトの画像を抽出）
     images_info = []
@@ -72,6 +70,23 @@ def main():
                 images_info.append(img_url)
                 
     print(f"検出された画像数: {len(images_info)}件")
+    
+    if not images_info:
+        print("画像が検出されませんでした。処理を中断します。")
+        return
+
+    # 前回の画像URLリストと比較し、まだ更新されていないかチェック
+    current_urls_sorted = sorted(images_info)
+    previous_urls_sorted = sorted(last_fetched_urls)
+
+    if last_fetched_urls and current_urls_sorted == previous_urls_sorted:
+        print("公式サイトの画像はまだ前月(または前回)から更新されていません。次回の確認まで待機します。")
+        return
+
+    print("新しい月のグリーティング画像への更新を確認しました！")
+
+    # 画像保存ディレクトリの作成
+    os.makedirs(IMAGE_DIR, exist_ok=True)
     
     # 画像をダウンロード（ローカルに保存）
     downloaded_images = []
@@ -119,7 +134,6 @@ def main():
     item_desc = ET.SubElement(item, "description")
     desc_html = f"<p>{current_year_month}度のグリーティング画像が更新されました。</p>"
     for img in downloaded_images:
-        # 画像をリンク(<a>)で囲み、タップで元画像URLを開けるように修正
         desc_html += f'<br><a href="{img["url"]}" target="_blank"><img src="{img["url"]}" style="max-width:100%;" /></a>'
     item_desc.text = desc_html
 
@@ -127,8 +141,9 @@ def main():
     tree.write(RSS_FILE, encoding="utf-8", xml_declaration=True)
     print(f"RSSファイルを生成しました: {RSS_FILE}")
 
-    # 状態を保存（今月分を取得済みとして記録）
+    # 状態を保存（今月分を取得済みとして記録し、今回の画像URLも保存）
     state["last_fetched_month"] = current_year_month
+    state["last_fetched_urls"] = images_info
     state["updated_at"] = now.isoformat()
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
