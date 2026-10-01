@@ -93,6 +93,11 @@ def main():
                 json.dump(state, f, ensure_ascii=False, indent=2)
         return
 
+    # すでに今月分を取得済みの場合は即座に終了（お休みモード）
+    if last_fetched_month == current_year_month:
+        print(f"今月({current_year_month})分はすでに取得済みです。処理を終了します。")
+        return
+
     print("新しい月のグリーティング画像への更新を確認しました！")
 
     # 画像保存ディレクトリの作成
@@ -161,3 +166,4 @@ def main():
     print("今月分の処理が完了しました。")
 
 if __name__ == "__main__":
+    main()
