@@ -102,8 +102,15 @@ def generate_feed_for_member(member_id):
 
     soup = BeautifulSoup(res.text, "html.parser")
     
-    name_tag = soup.find(class_="name")
-    member_name = name_tag.text.strip() if name_tag else f"メンバー{member_id}"
+    # ページ内から対象メンバーの名前を特定（ページ上部の共通部分に誤爆しないよう、<title>タグから確実に取得）
+    page_title = soup.title.text if soup.title else ""
+    if "公式ブログ" in page_title:
+        member_name = page_title.split("公式ブログ")[0].strip()
+    else:
+        member_name = f"メンバー{member_id}"
+        
+    # 判定用にスペースを削除した名前を用意（例: "大園 玲" -> "大園玲"）
+    safe_member_name = member_name.replace(" ", "").replace("　", "")
     
     posts = soup.find_all("li", class_="box")
     if not posts:
@@ -115,12 +122,25 @@ def generate_feed_for_member(member_id):
     
     print(f"[{member_id}] [解析中] {member_name} の記事を処理します（最大15件）")
     
-    # 連続更新による取りこぼしを防ぐため、最新15件まで処理するように拡張
-    for post in posts[:15]:
+    for post in posts:
+        if len(entries) >= 15:
+            break
+            
         post_a = post.find("a")
         if not post_a:
             continue
             
+        # ページ下部の「他メンバーの最新ブログ」などを巻き込まないための除外処理
+        post_name_tag = post.find(class_="name")
+        if post_name_tag:
+            post_author = post_name_tag.text.strip()
+            safe_post_author = post_author.replace(" ", "").replace("　", "")
+            
+            # 対象メンバーが特定できている場合、記事の作成者と一致しないものはスキップ
+            if not safe_member_name.startswith("メンバー") and safe_post_author != safe_member_name:
+                print(f"  -> [除外] 他メンバー（{post_author}）の記事を検知: スキップします")
+                continue
+                
         article_url = urljoin(BASE_URL, post_a["href"])
         
         title_tag = post.find(class_="title")
