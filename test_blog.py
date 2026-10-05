@@ -13,16 +13,50 @@ BASE_URL = "https://sakurazaka46.com"
 # GitHub PagesのベースURL
 FEED_BASE_URL = "https://kiki-o0.github.io/sakurazaka46blog-bot/"
 
-# メンバーの背番号リスト
-MEMBER_IDS = [
-    "46", "47", "48", "50", "51",  # 2期生
-    "53", "54", "55", "56", "57", "58",  # 新2期生
-    "59", "60", "61", "62", "63", "64", "65", "66", "67", "68", "69",  # 3期生
-    "70", "71", "72", "73", "74", "75", "76", "77", "78"  # 4期生
-]
+# メンバーの背番号と名前の紐付け（辞書型）
+# ※名前の間のスペース（半角/全角）は比較時に自動で無視されます。
+MEMBER_MAPPING = {
+    # 2期生
+    "46": "田村 保乃",
+    "47": "藤吉 夏鈴",
+    "48": "松田 里奈",
+    "50": "森田 ひかる",
+    "51": "山﨑 天",
+    
+    # 新2期生
+    "53": "遠藤 光莉",
+    "54": "大園 玲",
+    "55": "大沼 晶保",
+    "56": "幸阪 茉里乃",
+    "57": "増本 綺良",
+    "58": "守屋 麗奈",
+    
+    # 3期生
+    "59": "石森 璃花",
+    "60": "遠藤 理子",
+    "61": "小田倉 麗奈",
+    "62": "小島 凪紗",
+    "63": "谷口 愛季",
+    "64": "中嶋 優月",
+    "65": "的野 美青",
+    "66": "向井 純葉",
+    "67": "村井 優",
+    "68": "村山 美羽",
+    "69": "山下 瞳月",
+    
+    # 4期生
+    "70": "浅井 恋乃未",
+    "71": "稲熊 ひな",
+    "72": "勝又 春",
+    "73": "佐藤 愛桜",
+    "74": "中川 智尋",
+    "75": "松本 和子",
+    "76": "目黒 陽色",
+    "77": "山川 宇衣",
+    "78": "山田 桃実"
+}
 
 def parse_date_to_iso(date_str):
-    # ブログの投稿日時（例: 2026/08/20 10:22）から確実な日付形式を作成し、新規判定を安定させます
     m = re.findall(r'\d+', date_str)
     if len(m) >= 3:
         year, month, day = m[0], m[1], m[2]
@@ -37,12 +71,10 @@ def parse_article(url):
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     
-    # 詳細ページから時刻付きの日付文字列を取得
     detailed_date = ""
     date_tags = soup.find_all(class_="date")
     for tag in date_tags:
         text = tag.get_text(strip=True)
-        # 時刻らしきもの(HH:MM)が含まれているかチェック
         if re.search(r'\d{1,2}:\d{2}', text):
             detailed_date = text
             break
@@ -51,11 +83,9 @@ def parse_article(url):
     if not article:
         return "", detailed_date
         
-    # 1. 既知のプロモーション用クラスを持つブロックを丸ごと削除
     for guide in article.find_all(class_=lambda x: x and 'app_guide' in x):
         guide.decompose()
         
-    # 2. 画像の処理 (バナー系画像URLも除外)
     for img in article.find_all("img"):
         src = img.get("src", "")
         if not src or "app_guide" in src:
@@ -64,7 +94,6 @@ def parse_article(url):
             
         img_url = urljoin(BASE_URL, src)
         safe_url = escape(img_url)
-        # ここで alt="公式ブログ画像" を alt="" に変更し、無駄な文字の出力を防ぎます
         img_html = f'<p><a href="{safe_url}"><img src="{safe_url}" alt=""></a></p>'
         img.replace_with(f"__IMG_START__{img_html}__IMG_END__")
         
@@ -82,7 +111,6 @@ def parse_article(url):
         else:
             for line in part.split("\n"):
                 line = line.strip()
-                # 3. 最終テキスト出力からバナー特有の文言を除外
                 if "からのメッセージを受け取る" in line or line == "櫻坂46メッセージ" or line == "「櫻坂46メッセージ」で":
                     continue
                 if line:
@@ -91,8 +119,11 @@ def parse_article(url):
     return chr(10).join(elements), detailed_date
 
 def generate_feed_for_member(member_id):
+    # 辞書からメンバー名を確定
+    member_name = MEMBER_MAPPING.get(member_id, f"メンバー{member_id}")
+    
     list_url = f"{BASE_URL}/s/s46/diary/blog/list?ct={member_id}"
-    print(f"[{member_id}] [RSS取得中] ブログ一覧ページにアクセスしています...")
+    print(f"[{member_id}] [RSS取得中] {member_name} のブログ一覧ページにアクセスしています...")
     try:
         res = requests.get(list_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
         res.raise_for_status()
@@ -101,16 +132,6 @@ def generate_feed_for_member(member_id):
         return
 
     soup = BeautifulSoup(res.text, "html.parser")
-    
-    # ページ内から対象メンバーの名前を特定（ページ上部の共通部分に誤爆しないよう、<title>タグから確実に取得）
-    page_title = soup.title.text if soup.title else ""
-    if "公式ブログ" in page_title:
-        member_name = page_title.split("公式ブログ")[0].strip()
-    else:
-        member_name = f"メンバー{member_id}"
-        
-    # 判定用にスペースを削除した名前を用意（例: "大園 玲" -> "大園玲"）
-    safe_member_name = member_name.replace(" ", "").replace("　", "")
     
     posts = soup.find_all("li", class_="box")
     if not posts:
@@ -122,6 +143,9 @@ def generate_feed_for_member(member_id):
     
     print(f"[{member_id}] [解析中] {member_name} の記事を処理します（最大15件）")
     
+    # 判定用にスペースを削除した対象メンバー名を用意
+    safe_member_name = member_name.replace(" ", "").replace("　", "")
+    
     for post in posts:
         if len(entries) >= 15:
             break
@@ -130,13 +154,13 @@ def generate_feed_for_member(member_id):
         if not post_a:
             continue
             
-        # ページ下部の「他メンバーの最新ブログ」などを巻き込まないための除外処理
+        # 記事の作成者名を取得して、別人の記事が混ざっていないかチェック
         post_name_tag = post.find(class_="name")
         if post_name_tag:
             post_author = post_name_tag.text.strip()
             safe_post_author = post_author.replace(" ", "").replace("　", "")
             
-            # 対象メンバーが特定できている場合、記事の作成者と一致しないものはスキップ
+            # 対象メンバーの名前と、記事の作成者の名前が一致しない場合はスキップ
             if not safe_member_name.startswith("メンバー") and safe_post_author != safe_member_name:
                 print(f"  -> [除外] 他メンバー（{post_author}）の記事を検知: スキップします")
                 continue
@@ -156,7 +180,6 @@ def generate_feed_for_member(member_id):
             
         time.sleep(1)
         
-        # 詳細から時刻が取れなければリストのdateをフォールバックとして使う
         if not detailed_date:
             date_tag = post.find(class_="date")
             detailed_date = date_tag.text.strip() if date_tag else ""
@@ -187,7 +210,6 @@ def generate_feed_for_member(member_id):
     if not feed_updated:
         feed_updated = datetime.now(timezone.utc).isoformat()
         
-    # ファイル名を背番号にする (例: feed_62.xml)
     feed_filename = f"feed_{member_id}.xml"
     feed_url = f"{FEED_BASE_URL}{feed_filename}"
     
@@ -206,9 +228,10 @@ def generate_feed_for_member(member_id):
 def main():
     print("=== [処理開始] 全メンバーのRSS生成を開始します ===")
     os.makedirs("feeds", exist_ok=True)
-    for member_id in MEMBER_IDS:
+    # 辞書に登録されたすべてのメンバーIDを順番に処理
+    for member_id in MEMBER_MAPPING.keys():
         generate_feed_for_member(member_id)
-        time.sleep(1) # 連続アクセスによるエラー防止
+        time.sleep(1)
     print("=== [処理完了] 全てのRSS生成が正常に終了しました ===")
 
 if __name__ == "__main__":
