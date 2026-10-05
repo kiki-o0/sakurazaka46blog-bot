@@ -92,6 +92,7 @@ def parse_article(url):
 
 def generate_feed_for_member(member_id):
     list_url = f"{BASE_URL}/s/s46/diary/blog/list?ct={member_id}"
+    print(f"[{member_id}] [RSS取得中] ブログ一覧ページにアクセスしています...")
     try:
         res = requests.get(list_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
         res.raise_for_status()
@@ -106,14 +107,16 @@ def generate_feed_for_member(member_id):
     
     posts = soup.find_all("li", class_="box")
     if not posts:
-        print(f"[{member_id}] [スキップ] 記事が見つかりません")
+        print(f"[{member_id}] [スキップ] {member_name} の新着記事が見つかりません")
         return
         
     entries = []
     feed_updated = None
     
-    # 各メンバー最新3件の記事をフィードに含める
-    for post in posts[:3]:
+    print(f"[{member_id}] [解析中] {member_name} の記事を処理します（最大15件）")
+    
+    # 連続更新による取りこぼしを防ぐため、最新15件まで処理するように拡張
+    for post in posts[:15]:
         post_a = post.find("a")
         if not post_a:
             continue
