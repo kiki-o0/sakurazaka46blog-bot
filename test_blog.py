@@ -14,7 +14,6 @@ BASE_URL = "https://sakurazaka46.com"
 FEED_BASE_URL = "https://kiki-o0.github.io/sakurazaka46blog-bot/"
 
 # メンバーの背番号と名前の紐付け（辞書型）
-# ※名前の間のスペース（半角/全角）は比較時に自動で無視されます。
 MEMBER_MAPPING = {
     # 2期生
     "46": "田村 保乃",
@@ -119,11 +118,11 @@ def parse_article(url):
     return chr(10).join(elements), detailed_date
 
 def generate_feed_for_member(member_id):
-    # 辞書からメンバー名を確定
     member_name = MEMBER_MAPPING.get(member_id, f"メンバー{member_id}")
+    safe_member_name = member_name.replace(" ", "").replace("　", "")
     
     list_url = f"{BASE_URL}/s/s46/diary/blog/list?ct={member_id}"
-    print(f"[{member_id}] [RSS取得中] {member_name} のブログ一覧ページにアクセスしています...")
+    print(f"[{member_id}] [RSS取得中] {member_name} のブログ一覧にアクセスしています...")
     try:
         res = requests.get(list_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
         res.raise_for_status()
@@ -143,9 +142,6 @@ def generate_feed_for_member(member_id):
     
     print(f"[{member_id}] [解析中] {member_name} の記事を処理します（最大15件）")
     
-    # 判定用にスペースを削除した対象メンバー名を用意
-    safe_member_name = member_name.replace(" ", "").replace("　", "")
-    
     for post in posts:
         if len(entries) >= 15:
             break
@@ -154,21 +150,26 @@ def generate_feed_for_member(member_id):
         if not post_a:
             continue
             
-        # 記事の作成者名を取得して、別人の記事が混ざっていないかチェック
+        href = post_a.get("href", "")
+        # 【原因判明のトラップ対策】詳細ページへのリンクを持たない下部の「メンバー別ボタン」等を確実に弾く
+        if "/diary/detail/" not in href:
+            continue
+            
+        title_tag = post.find(class_="title")
+        # 全角スペース「　」だけで投稿されたタイトルをstripすると空になるため、その場合は「無題」にする
+        title = title_tag.text.strip() if title_tag and title_tag.text.strip() else "無題"
+            
         post_name_tag = post.find(class_="name")
         if post_name_tag:
             post_author = post_name_tag.text.strip()
             safe_post_author = post_author.replace(" ", "").replace("　", "")
             
-            # 対象メンバーの名前と、記事の作成者の名前が一致しない場合はスキップ
+            # サイドバーの「他メンバーの最新ブログ」が混ざった場合はスキップ
             if not safe_member_name.startswith("メンバー") and safe_post_author != safe_member_name:
                 print(f"  -> [除外] 他メンバー（{post_author}）の記事を検知: スキップします")
                 continue
                 
-        article_url = urljoin(BASE_URL, post_a["href"])
-        
-        title_tag = post.find(class_="title")
-        title = title_tag.text.strip() if title_tag else "無題"
+        article_url = urljoin(BASE_URL, href)
         
         print(f"  -> [取得中] 記事タイトル: {title}")
         try:
@@ -205,6 +206,7 @@ def generate_feed_for_member(member_id):
         entries.append(entry)
 
     if not entries:
+        print(f"[{member_id}] [スキップ] {member_name} の有効なブログ記事はありませんでした")
         return
         
     if not feed_updated:
@@ -228,7 +230,6 @@ def generate_feed_for_member(member_id):
 def main():
     print("=== [処理開始] 全メンバーのRSS生成を開始します ===")
     os.makedirs("feeds", exist_ok=True)
-    # 辞書に登録されたすべてのメンバーIDを順番に処理
     for member_id in MEMBER_MAPPING.keys():
         generate_feed_for_member(member_id)
         time.sleep(1)
