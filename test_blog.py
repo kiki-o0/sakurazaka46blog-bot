@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import json
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 from xml.sax.saxutils import escape
@@ -10,49 +11,20 @@ from bs4 import BeautifulSoup
 
 
 BASE_URL = "https://sakurazaka46.com"
-# GitHub PagesのベースURL
 FEED_BASE_URL = "https://kiki-o0.github.io/sakurazaka46blog-bot/"
+STATE_FILE = "last_blogs.json"
 
-# メンバーの背番号と名前の紐付け（辞書型）
 MEMBER_MAPPING = {
     # 2期生
-    "46": "田村 保乃",
-    "47": "藤吉 夏鈴",
-    "48": "松田 里奈",
-    "50": "森田 ひかる",
-    "51": "山﨑 天",
-    
+    "46": "田村 保乃", "47": "藤吉 夏鈴", "48": "松田 里奈", "50": "森田 ひかる", "51": "山﨑 天",
     # 新2期生
-    "53": "遠藤 光莉",
-    "54": "大園 玲",
-    "55": "大沼 晶保",
-    "56": "幸阪 茉里乃",
-    "57": "増本 綺良",
-    "58": "守屋 麗奈",
-    
+    "53": "遠藤 光莉", "54": "大園 玲", "55": "大沼 晶保", "56": "幸阪 茉里乃", "57": "増本 綺良", "58": "守屋 麗奈",
     # 3期生
-    "59": "石森 璃花",
-    "60": "遠藤 理子",
-    "61": "小田倉 麗奈",
-    "62": "小島 凪紗",
-    "63": "谷口 愛季",
-    "64": "中嶋 優月",
-    "65": "的野 美青",
-    "66": "向井 純葉",
-    "67": "村井 優",
-    "68": "村山 美羽",
-    "69": "山下 瞳月",
-    
+    "59": "石森 璃花", "60": "遠藤 理子", "61": "小田倉 麗奈", "62": "小島 凪紗", "63": "谷口 愛季", 
+    "64": "中嶋 優月", "65": "的野 美青", "66": "向井 純葉", "67": "村井 優", "68": "村山 美羽", "69": "山下 瞳月",
     # 4期生
-    "70": "浅井 恋乃未",
-    "71": "稲熊 ひな",
-    "72": "勝又 春",
-    "73": "佐藤 愛桜",
-    "74": "中川 智尋",
-    "75": "松本 和子",
-    "76": "目黒 陽色",
-    "77": "山川 宇衣",
-    "78": "山田 桃実"
+    "70": "浅井 恋乃未", "71": "稲熊 ひな", "72": "勝又 春", "73": "佐藤 愛桜", "74": "中川 智尋", 
+    "75": "松本 和子", "76": "目黒 陽色", "77": "山川 宇衣", "78": "山田 桃実"
 }
 
 def parse_date_to_iso(date_str):
@@ -113,13 +85,20 @@ def parse_article(url):
                 if "からのメッセージを受け取る" in line or line == "櫻坂46メッセージ" or line == "「櫻坂46メッセージ」で":
                     continue
                 if line:
-                    elements.append("<p>" + escape(line) + "</p>")
+                    # XMLエラーを防ぐために文字を安全にしつつ、URLだけをリンク（<a>タグ）に変換する魔法の処理
+                    safe_line = escape(line)
+                    linked_line = re.sub(r'(https?://[a-zA-Z0-9./?=_-]+)', r'<a href="\1" target="_blank">\1</a>', safe_line)
+                    elements.append("<p>" + linked_line + "</p>")
                     
     return chr(10).join(elements), detailed_date
 
-def generate_feed_for_member(member_id):
+def generate_feed_for_member(member_id, state):
     member_name = MEMBER_MAPPING.get(member_id, f"メンバー{member_id}")
     safe_member_name = member_name.replace(" ", "").replace("　", "")
+    
+    # 過去の履歴（JSON）から、このメンバーの知っているURLリストを作成
+    member_state = state.get(member_id, [])
+    known_urls = { entry["url"]: entry for entry in member_state }
     
     list_url = f"{BASE_URL}/s/s46/diary/blog/list?ct={member_id}"
     print(f"[{member_id}] [RSS取得中] {member_name} のブログ一覧にアクセスしています...")
@@ -131,19 +110,18 @@ def generate_feed_for_member(member_id):
         return
 
     soup = BeautifulSoup(res.text, "html.parser")
-    
     posts = soup.find_all("li", class_="box")
     if not posts:
         print(f"[{member_id}] [スキップ] {member_name} の新着記事が見つかりません")
         return
         
-    entries = []
+    new_member_state = []
     feed_updated = None
     
     print(f"[{member_id}] [解析中] {member_name} の記事を処理します（最大15件）")
     
     for post in posts:
-        if len(entries) >= 15:
+        if len(new_member_state) >= 15:
             break
             
         post_a = post.find("a")
@@ -151,27 +129,33 @@ def generate_feed_for_member(member_id):
             continue
             
         href = post_a.get("href", "")
-        # 【原因判明のトラップ対策】詳細ページへのリンクを持たない下部の「メンバー別ボタン」等を確実に弾く
         if "/diary/detail/" not in href:
             continue
             
         title_tag = post.find(class_="title")
-        # 全角スペース「　」だけで投稿されたタイトルをstripすると空になるため、その場合は「無題」にする
         title = title_tag.text.strip() if title_tag and title_tag.text.strip() else "無題"
             
         post_name_tag = post.find(class_="name")
         if post_name_tag:
             post_author = post_name_tag.text.strip()
             safe_post_author = post_author.replace(" ", "").replace("　", "")
-            
-            # サイドバーの「他メンバーの最新ブログ」が混ざった場合はスキップ
             if not safe_member_name.startswith("メンバー") and safe_post_author != safe_member_name:
                 print(f"  -> [除外] 他メンバー（{post_author}）の記事を検知: スキップします")
                 continue
                 
         article_url = urljoin(BASE_URL, href)
         
-        print(f"  -> [取得中] 記事タイトル: {title}")
+        # 爆速化ロジック：JSONに載っているURLなら、公式サイトを見に行かずにJSONからデータを復元
+        if article_url in known_urls:
+            print(f"  -> [高速スキップ] 既知の記事です（データ復元）: {title}")
+            known_data = known_urls[article_url]
+            new_member_state.append(known_data)
+            if not feed_updated:
+                feed_updated = known_data["updated"]
+            continue
+        
+        # JSONに載っていない新しいURLなら、詳細ページを見に行く
+        print(f"  -> [新規取得中] 記事タイトル: {title}")
         try:
             content, detailed_date = parse_article(article_url)
             print(f"     => [成功] 記事解析完了")
@@ -186,31 +170,40 @@ def generate_feed_for_member(member_id):
             detailed_date = date_tag.text.strip() if date_tag else ""
             
         entry_updated = parse_date_to_iso(detailed_date)
-        
         if not feed_updated:
             feed_updated = entry_updated
-        
-        entry = f"""
-  <entry>
-    <title>{escape(title)}</title>
-    <id>{escape(article_url)}</id>
-    <link href="{escape(article_url)}"/>
-    <updated>{escape(entry_updated)}</updated>
-    <author>
-      <name>{escape(member_name)}</name>
-    </author>
-    <content type="html"><![CDATA[
-{content}
-    ]]></content>
-  </entry>"""
-        entries.append(entry)
+            
+        # 新しい記事データをリストに追加
+        new_member_state.append({
+            "url": article_url,
+            "title": title,
+            "updated": entry_updated,
+            "content": content
+        })
 
-    if not entries:
+    if not new_member_state:
         print(f"[{member_id}] [スキップ] {member_name} の有効なブログ記事はありませんでした")
         return
         
     if not feed_updated:
         feed_updated = datetime.now(timezone.utc).isoformat()
+        
+    # XMLのエントリー部分を作成
+    entries_xml = ""
+    for entry_data in new_member_state:
+        entries_xml += f"""
+  <entry>
+    <title>{escape(entry_data['title'])}</title>
+    <id>{escape(entry_data['url'])}</id>
+    <link href="{escape(entry_data['url'])}"/>
+    <updated>{escape(entry_data['updated'])}</updated>
+    <author>
+      <name>{escape(member_name)}</name>
+    </author>
+    <content type="html"><![CDATA[
+{entry_data['content']}
+    ]]></content>
+  </entry>"""
         
     feed_filename = f"feed_{member_id}.xml"
     feed_url = f"{FEED_BASE_URL}{feed_filename}"
@@ -220,19 +213,46 @@ def generate_feed_for_member(member_id):
   <title>櫻坂46｜{escape(member_name)} 公式ブログ</title>
   <id>{escape(feed_url)}</id>
   <updated>{escape(feed_updated)}</updated>
-  <link href="{escape(feed_url)}" rel="self"/>{"".join(entries)}
+  <link href="{escape(feed_url)}" rel="self"/>{entries_xml}
 </feed>
 """
     with open(f"feeds/{feed_filename}", "w", encoding="utf-8") as f:
         f.write(xml)
     print(f"[{member_id}] [完了] {member_name} のフィード生成 (feeds/{feed_filename})")
+    
+    # 更新された最新15件のデータをJSON用に戻す
+    state[member_id] = new_member_state
 
 def main():
     print("=== [処理開始] 全メンバーのRSS生成を開始します ===")
     os.makedirs("feeds", exist_ok=True)
+    
+    # 前回の記憶（JSON）を読み込む
+    if os.path.exists(STATE_FILE):
+        print("-> [読込] 過去のブログ履歴データを読み込みます...")
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except Exception as e:
+            print(f"-> [警告] 履歴ファイルの読み込みに失敗しました。新規で作成します: {e}")
+            state = {}
+    else:
+        print("-> [読込] 過去の履歴がありません。新規で全取得します。")
+        state = {}
+
+    # 各メンバーの処理
     for member_id in MEMBER_MAPPING.keys():
-        generate_feed_for_member(member_id)
-        time.sleep(1)
+        generate_feed_for_member(member_id, state)
+        time.sleep(1) # 一覧ページ取得用のインターバル
+        
+    # 最新の記憶（JSON）を上書き保存する
+    print(f"=== [保存] ブログ履歴データを {STATE_FILE} に保存します ===")
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"-> [エラー] 履歴ファイルの保存に失敗しました: {e}")
+        
     print("=== [処理完了] 全てのRSS生成が正常に終了しました ===")
 
 if __name__ == "__main__":
