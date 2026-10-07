@@ -85,7 +85,6 @@ def parse_article(url):
                 if "からのメッセージを受け取る" in line or line == "櫻坂46メッセージ" or line == "「櫻坂46メッセージ」で":
                     continue
                 if line:
-                    # XMLエラーを防ぐために文字を安全にしつつ、URLだけをリンク（<a>タグ）に変換する魔法の処理
                     safe_line = escape(line)
                     linked_line = re.sub(r'(https?://[a-zA-Z0-9./?=_-]+)', r'<a href="\1" target="_blank">\1</a>', safe_line)
                     elements.append("<p>" + linked_line + "</p>")
@@ -98,7 +97,12 @@ def generate_feed_for_member(member_id, state):
     
     # 過去の履歴（JSON）から、このメンバーの知っているURLリストを作成
     member_state = state.get(member_id, [])
-    known_urls = { entry["url"]: entry for entry in member_state }
+    # 古い形式の記憶ファイル（文字だけ）が残っていたら、空の状態にリセットする処理を追加
+    if not isinstance(member_state, list):
+        print(f"[{member_id}] [警告] 古い形式の記憶を見つけたため、新しく作り直します。")
+        member_state = []
+        
+    known_urls = { entry["url"]: entry for entry in member_state if isinstance(entry, dict) and "url" in entry }
     
     list_url = f"{BASE_URL}/s/s46/diary/blog/list?ct={member_id}"
     print(f"[{member_id}] [RSS取得中] {member_name} のブログ一覧にアクセスしています...")
@@ -145,7 +149,6 @@ def generate_feed_for_member(member_id, state):
                 
         article_url = urljoin(BASE_URL, href)
         
-        # 爆速化ロジック：JSONに載っているURLなら、公式サイトを見に行かずにJSONからデータを復元
         if article_url in known_urls:
             print(f"  -> [高速スキップ] 既知の記事です（データ復元）: {title}")
             known_data = known_urls[article_url]
@@ -154,7 +157,6 @@ def generate_feed_for_member(member_id, state):
                 feed_updated = known_data["updated"]
             continue
         
-        # JSONに載っていない新しいURLなら、詳細ページを見に行く
         print(f"  -> [新規取得中] 記事タイトル: {title}")
         try:
             content, detailed_date = parse_article(article_url)
@@ -173,7 +175,6 @@ def generate_feed_for_member(member_id, state):
         if not feed_updated:
             feed_updated = entry_updated
             
-        # 新しい記事データをリストに追加
         new_member_state.append({
             "url": article_url,
             "title": title,
@@ -188,7 +189,6 @@ def generate_feed_for_member(member_id, state):
     if not feed_updated:
         feed_updated = datetime.now(timezone.utc).isoformat()
         
-    # XMLのエントリー部分を作成
     entries_xml = ""
     for entry_data in new_member_state:
         entries_xml += f"""
@@ -220,14 +220,12 @@ def generate_feed_for_member(member_id, state):
         f.write(xml)
     print(f"[{member_id}] [完了] {member_name} のフィード生成 (feeds/{feed_filename})")
     
-    # 更新された最新15件のデータをJSON用に戻す
     state[member_id] = new_member_state
 
 def main():
     print("=== [処理開始] 全メンバーのRSS生成を開始します ===")
     os.makedirs("feeds", exist_ok=True)
     
-    # 前回の記憶（JSON）を読み込む
     if os.path.exists(STATE_FILE):
         print("-> [読込] 過去のブログ履歴データを読み込みます...")
         try:
@@ -240,12 +238,10 @@ def main():
         print("-> [読込] 過去の履歴がありません。新規で全取得します。")
         state = {}
 
-    # 各メンバーの処理
     for member_id in MEMBER_MAPPING.keys():
         generate_feed_for_member(member_id, state)
-        time.sleep(1) # 一覧ページ取得用のインターバル
+        time.sleep(1)
         
-    # 最新の記憶（JSON）を上書き保存する
     print(f"=== [保存] ブログ履歴データを {STATE_FILE} に保存します ===")
     try:
         with open(STATE_FILE, "w", encoding="utf-8") as f:
