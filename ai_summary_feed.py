@@ -4,6 +4,7 @@ import json
 import time
 from datetime import datetime, timezone
 from xml.sax.saxutils import escape
+import requests
 import google.generativeai as genai
 
 # ==========================================
@@ -13,6 +14,10 @@ SOURCE_STATE_FILE = "last_blogs.json"
 AI_STATE_FILE = "ai_summary_state.json"
 FEED_FILENAME = "ai_summary_feed.xml"
 FEED_BASE_URL = "https://kiki-o0.github.io/sakurazaka46blog-bot/"
+GITHUB_RAW_URLS = [
+    "https://raw.githubusercontent.com/kiki-o0/sakurazaka46blog-bot/main/last_blogs.json",
+    "https://raw.githubusercontent.com/kiki-o0/sakurazaka46blog-bot/master/last_blogs.json"
+]
 MAX_API_CALLS_PER_RUN = 10  # 1回の実行で新しくAIに要約させる最大件数
 FEED_MAX_ENTRIES = 30       # フィードに表示する最新記事の最大数
 
@@ -57,7 +62,30 @@ Markdownのバッククォート(```jsonなど)は含めず、純粋なJSONテ�
 {MEMBER_DICTIONARY}
 """
 
+def load_source_state():
+    """ローカルまたはGitHubからブログ履歴データを読み込む"""
+    if os.path.exists(SOURCE_STATE_FILE):
+        print(f"-> [読込] ローカルの {SOURCE_STATE_FILE} を読み込みます...")
+        try:
+            with open(SOURCE_STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"  -> [警告] ローカルファイルの読み込みに失敗しました: {e}")
+
+    print("-> [通信] ローカルにデータがないため、GitHubから最新のブログ履歴を取得します...")
+    for url in GITHUB_RAW_URLS:
+        try:
+            res = requests.get(url, timeout=15)
+            if res.status_code == 200:
+                print("  -> [成功] GitHubから最新ブログデータを取得しました！")
+                return res.json()
+        except Exception as e:
+            print(f"  -> [スキップ] 取得失敗 ({url}): {e}")
+
+    return None
+
 def get_ai_summary(author, text):
+    """Gemini APIを呼び出してJSON形式で要約とタグを取得する"""
     prompt = f"【筆者】\n{author}\n\n【本文】\n{text}"
     
     try:
@@ -93,12 +121,10 @@ def main():
         return
     genai.configure(api_key=api_key)
 
-    if not os.path.exists(SOURCE_STATE_FILE):
-        print(f"[スキップ] 元データとなる {SOURCE_STATE_FILE} が見つかりません。")
+    source_state = load_source_state()
+    if not source_state:
+        print(f"[エラー] ブログデータの取得に失敗しました。処理を終了します。")
         return
-        
-    with open(SOURCE_STATE_FILE, "r", encoding="utf-8") as f:
-        source_state = json.load(f)
 
     ai_state = {}
     if os.path.exists(AI_STATE_FILE):
@@ -121,8 +147,10 @@ def main():
     feed_entries = []
     
     for article in all_articles[:FEED_MAX_ENTRIES]:
-        url = article["url"]
-        
+        url = article.get("url", "")
+        if not url:
+            continue
+            
         if url in ai_state:
             feed_entries.append(ai_state[url])
             continue
