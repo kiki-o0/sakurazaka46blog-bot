@@ -5,7 +5,6 @@ import time
 from datetime import datetime, timezone
 from xml.sax.saxutils import escape
 import requests
-import google.generativeai as genai
 
 # ==========================================
 # 設定部分
@@ -35,7 +34,7 @@ MEMBER_DICTIONARY = """
 【3期生】
 石森 璃花 (りか, りかちゃん) / 遠藤 理子 (えんりこ, りー) / 小田倉 麗奈 (お嬢, れいな)
 小島 凪紗 (こんなぎ, なぎ) / 谷口 愛季 (あいり) / 中嶋 優月 (ゆーづ)
-的野 美青 (みお) / 向井 純葉 (いとは, いとちゃん) / 村井 優 (ゆう, ゆうちゃん)
+的に 美青 (みお) / 向井 純葉 (いとは, いとちゃん) / 村井 優 (ゆう, ゆうちゃん)
 村山 美羽 (みう) / 山下 瞳月 (しーちゃん,しー)
 【4期生】
 浅井 恋乃未 (このみ, このみん) / 稲熊 ひな (ひなぐま) / 勝又 春 (ﾊﾙｻﾝ)
@@ -63,67 +62,74 @@ Markdownのバッククォート(```jsonなど)は含めず、純粋なJSONテ�
 """
 
 def load_source_state():
-    """ローカルまたはGitHubからブログ履歴データを読み込む"""
     if os.path.exists(SOURCE_STATE_FILE):
-        print(f"-> [読込] ローカルの {SOURCE_STATE_FILE} を読み込みます...")
+        print(f"-> [読込中] ローカルの {SOURCE_STATE_FILE} を確認しました")
         try:
             with open(SOURCE_STATE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            print(f"  -> [警告] ローカルファイルの読み込みに失敗しました: {e}")
+            print(f"  -> [警告] ローカルファイルの読み込み失敗: {e}")
 
-    print("-> [通信] ローカルにデータがないため、GitHubから最新のブログ履歴を取得します...")
+    print("-> [RSS取得中] GitHubから最新ブログデータを取得しています...")
     for url in GITHUB_RAW_URLS:
         try:
             res = requests.get(url, timeout=15)
             if res.status_code == 200:
-                print("  -> [成功] GitHubから最新ブログデータを取得しました！")
+                print("  -> [成功] GitHubから最新ブログデータの取得が完了しました")
                 return res.json()
         except Exception as e:
             print(f"  -> [スキップ] 取得失敗 ({url}): {e}")
 
     return None
 
-def get_ai_summary(author, text):
-    """Gemini APIを呼び出してJSON形式で要約とタグを取得する"""
-    prompt = f"【筆者】\n{author}\n\n【本文】\n{text}"
+def get_ai_summary(api_key, author, text):
+    api_url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key}"
+    full_prompt = f"{AI_SYSTEM_PROMPT}\n\n【筆者】\n{author}\n\n【本文】\n{text}"
+    
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": full_prompt}
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.2
+        }
+    }
+    
+    headers = {"Content-Type": "application/json"}
     
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(
-            contents=[
-                {"role": "user", "parts": [AI_SYSTEM_PROMPT]},
-                {"role": "user", "parts": [prompt]}
-            ],
-            generation_config={"temperature": 0.2} 
-        )
+        res = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        res.raise_for_status()
+        res_data = res.json()
         
-        res_text = response.text.strip()
-        if res_text.startswith("```json"):
-            res_text = res_text[7:]
-        if res_text.startswith("```"):
-            res_text = res_text[3:]
-        if res_text.endswith("```"):
-            res_text = res_text[:-3]
+        raw_output = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if raw_output.startswith("```json"):
+            raw_output = raw_output[7:]
+        if raw_output.startswith("```"):
+            raw_output = raw_output[3:]
+        if raw_output.endswith("```"):
+            raw_output = raw_output[:-3]
             
-        result = json.loads(res_text.strip())
-        return result
+        return json.loads(raw_output.strip())
     except Exception as e:
-        print(f"  -> [AIエラー] Gemini APIの呼び出し・解析に失敗しました: {e}")
+        print(f"  -> [AI解析エラー] Geminiとの通信・解析に失敗しました: {e}")
         return None
 
 def main():
-    print("=== [処理開始] AI要約フィードの生成を開始します ===")
+    print("=== [処理開始] AI要約フィードの生成処理を開始します ===")
     
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         print("[エラー] 環境変数 GEMINI_API_KEY が設定されていません。処理を中断します。")
         return
-    genai.configure(api_key=api_key)
 
     source_state = load_source_state()
     if not source_state:
-        print(f"[エラー] ブログデータの取得に失敗しました。処理を終了します。")
+        print("[エラー] ブログデータの取得に失敗しました。処理を終了します。")
         return
 
     ai_state = {}
@@ -131,7 +137,7 @@ def main():
         try:
             with open(AI_STATE_FILE, "r", encoding="utf-8") as f:
                 ai_state = json.load(f)
-        except:
+        except Exception:
             pass
 
     all_articles = []
@@ -156,17 +162,17 @@ def main():
             continue
             
         if api_call_count >= MAX_API_CALLS_PER_RUN:
-            print(f"[制限] 1回のAPI呼び出し上限({MAX_API_CALLS_PER_RUN}回)に達したため、残りの新規要約は次回に持ち越します。")
+            print(f"[新着判定中] 1回の実行上限({MAX_API_CALLS_PER_RUN}件)に達したため、残りは次回処理します")
             break
             
-        print(f"[要約中] {article.get('title', '無題')} のAI要約を生成しています...")
+        print(f"[AI解析中] 『{article.get('title', '無題')}』の要約とタグを生成しています...")
         
         raw_text = re.sub(r'<[^>]+>', '', article.get("content", "")).strip()
         raw_text = raw_text[:2000] 
         
         author_hint = f"メンバーID: {article.get('member_id', '不明')} (※3期生は60番台が中心です)"
         
-        ai_result = get_ai_summary(author_hint, raw_text)
+        ai_result = get_ai_summary(api_key, author_hint, raw_text)
         if ai_result:
             api_call_count += 1
             
@@ -194,7 +200,7 @@ def main():
             ai_state[url] = summarized_article
             feed_entries.append(summarized_article)
             
-            print(f"  -> [成功] タグ抽出: {tags_text}")
+            print(f"  -> [解析成功] 抽出タグ: {tags_text}")
             time.sleep(2)
 
     if not feed_entries:
@@ -232,7 +238,7 @@ def main():
     with open(AI_STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(ai_state, f, ensure_ascii=False, indent=2)
         
-    print(f"=== [完了] AI要約フィード生成完了 (feeds/{FEED_FILENAME}) ===")
+    print(f"=== [処理完了] AI要約フィードを作成しました (feeds/{FEED_FILENAME}) ===")
 
 if __name__ == "__main__":
     main()
