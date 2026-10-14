@@ -3,7 +3,9 @@ name: Generate and deploy sakura blog all RSS
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/46 * * * *"
+    # 日本時間の朝9時から深夜0時までの毎時46分に実行（深夜1時〜朝8時はお休み）
+    # UTC（世界標準時）では当日の0時〜15時となるため、以下のような指定になります
+    - cron: "46 0-15 * * *"
 
 permissions:
   contents: write
