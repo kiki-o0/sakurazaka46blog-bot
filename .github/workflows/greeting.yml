@@ -2,8 +2,8 @@ name: Greeting RSS Auto Feeder
 
 on:
   schedule:
-    # 毎日3時間おきに実行（更新されるまで自動チェックし続け、更新後はPython側で自動停止します）
-    - cron: '0 */3 * * *'
+    # 毎日3時間おき（毎時46分）に実行（更新されるまで自動チェックし続け、更新後はPython側で自動停止します）
+    - cron: '46 */3 * * *'
 
   workflow_dispatch:
 
